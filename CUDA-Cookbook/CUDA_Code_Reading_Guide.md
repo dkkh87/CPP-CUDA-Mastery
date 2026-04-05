@@ -135,6 +135,8 @@ Dispatcher (routes by device + dtype)    ← C++
 
 ### 2.4 The Elementwise Kernel Pattern
 
+Most PyTorch elementwise operations (add, mul, relu) share this same kernel structure. The actual operation is passed as a functor, so the grid-stride loop and launch logic are written once and reused for every elementwise op.
+
 ```cpp
 // Simplified illustration of PyTorch's elementwise pattern
 template <typename func_t>
@@ -216,6 +218,8 @@ Instruction   → Maps to hardware: mma.sync, ldmatrix (e.g., 16×8×16)
 ```
 
 ### 3.3 The K-Dimension Mainloop
+
+This is the core loop of a tiled GEMM: each iteration loads one tile of A and B into shared memory, computes partial products, and accumulates the result. The loop walks along the K dimension, processing one `BK`-wide slice at a time.
 
 ```cpp
 // Simplified CUTLASS-style tiled GEMM (illustrative)
@@ -384,6 +388,8 @@ especially on modern GPUs where compute is cheaper than memory bandwidth.
 | Tensor cores | Manual via wmma/mma | Automatic via `tl.dot` |
 
 ### 5.2 Block-Based Programming Model
+
+In CUDA you write code for a single thread and launch millions of them. In Triton you write code for a whole block of elements — the compiler handles threading, shared memory, and synchronization automatically.
 
 ```python
 # CUDA thinks per-thread: "Thread i processes element i"
@@ -581,6 +587,8 @@ L5: Full model   → Fused QKV, quantized inference, speculative decoding
 
 ### 7.4 Profiling While Reading
 
+These two profiling tools are essential when reading and writing CUDA code. `nsys` gives you a timeline of CPU/GPU activity (where time is spent), while `ncu` gives you detailed per-kernel metrics (why a kernel is slow).
+
 ```bash
 nsys profile --stats=true ./my_program          # Timeline view
 ncu --set full ./my_program                      # Kernel details
@@ -636,6 +644,8 @@ Learned:     [New insight or technique]
 ```
 
 ### 7.8 Setting Up for Exploration
+
+To follow along with the examples in this guide, install these tools and clone the key repositories for study. Ripgrep (`rg`) is especially useful for navigating large CUDA codebases.
 
 ```bash
 # Essential tools

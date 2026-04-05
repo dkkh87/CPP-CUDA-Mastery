@@ -90,6 +90,8 @@ for (int i = 1; i < N; i++) {
 }
 ```
 
+The fix is to restructure the algorithm so each element reads only from its own independent input rather than from the previous element's output. This removes the dependency chain entirely.
+
 ```cpp
 // PARALLEL: each element is independent
 for (int i = 0; i < N; i++) {
