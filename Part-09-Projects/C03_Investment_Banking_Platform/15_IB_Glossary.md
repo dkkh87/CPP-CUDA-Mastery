@@ -423,6 +423,131 @@ through discount factors. (Module 10: Yield Curve)
 
 ---
 
+## Additional Trading & Market Structure Terms
+
+**Aggregation** — Combining multiple data points into a single summary value. In market
+data, aggregation means grouping individual orders at a price level into total bid/ask
+size. In risk, aggregation means summing position-level Greeks into portfolio-level
+Greeks. Different from averaging — aggregation preserves totals. (Module 5, Module 9)
+
+**Alpha** — The excess return of an investment relative to a benchmark index. A fund
+with 12% return when the benchmark returned 10% has alpha of 2%. Trading strategies
+aim to generate positive alpha. In code, alpha is measured post-trade against VWAP
+or arrival price benchmarks. (Module 12: System Integration)
+
+**Arbitrage** — Exploiting price differences between markets or instruments to earn
+risk-free profit. Example: if AAPL trades at $150 on NYSE and $150.02 on BATS, buy
+on NYSE and sell on BATS. True arbitrage is risk-free; "statistical arbitrage" involves
+probabilistic bets. (Module 12: System Integration)
+
+**Back-Testing** — Running a trading strategy against historical market data to evaluate
+its performance before deploying with real capital. Back-testing requires deterministic
+replay and accurate simulation of fills, latency, and market impact. Our benchmark
+suite (Module 14) uses similar replay techniques. (Module 14: Benchmarks)
+
+**Book (Order Book)** — The collection of all outstanding buy and sell orders for a
+security, organized by price level. The "top of book" is the best bid and best ask.
+"Book depth" refers to how many price levels are visible. A "thin book" has few orders
+and is vulnerable to large price swings. (Module 2: Order Book)
+
+**Counterparty** — The other party in a financial transaction. When you buy shares,
+the counterparty is the seller. Counterparty risk is the risk that the other party
+fails to fulfill their obligations (defaults). Central clearing reduces counterparty
+risk. (Module 11: Persistence)
+
+**Execution Quality** — A measure of how well orders were filled compared to
+benchmarks. Metrics include: fill rate, slippage vs. arrival price, VWAP performance,
+and price improvement. Regulators require brokers to report execution quality
+statistics. (Module 6: Execution Gateway)
+
+**Flash Crash** — An extremely rapid, deep market decline followed by a quick recovery.
+The May 6, 2010 Flash Crash saw the DJIA drop ~1,000 points in minutes. Caused by
+algorithmic trading feedback loops. Circuit breakers were implemented afterward.
+(Module 5: Risk Engine)
+
+**High-Frequency Trading (HFT)** — A form of algorithmic trading characterized by
+extremely high speeds (microsecond-level), high turnover, and very short holding periods.
+HFT firms invest heavily in co-location, FPGA hardware, and optimized software. Our
+platform's low-latency architecture follows HFT design principles.
+(Module 12: System Integration, Module 13: Infrastructure)
+
+**Latency** — The time delay between an event (e.g., market data arriving) and a
+response (e.g., order sent). Measured in microseconds (μs) or nanoseconds (ns) for
+trading systems. Types: network latency, processing latency, serialization latency.
+Total tick-to-trade latency is the sum of all components.
+(Module 13: Infrastructure, Module 14: Benchmarks)
+
+**Limit Order** — An order to buy or sell at a specified price or better. A limit buy
+at $100 executes only at $100 or lower. Limit orders provide liquidity (they rest in
+the order book) and give price certainty but not execution certainty.
+(Module 2: Order Book)
+
+**Market Impact** — The effect of a trade on the market price. Large buy orders push
+prices up; large sell orders push prices down. Market impact is proportional to order
+size relative to average daily volume. VWAP and TWAP algorithms minimize market impact.
+(Module 12: System Integration)
+
+**Market Order** — An order to buy or sell immediately at the best available price. Market
+orders guarantee execution but not price. In a thin book, a large market order can sweep
+through multiple price levels, causing significant slippage.
+(Module 2: Order Book)
+
+**Mid Price** — The midpoint between the best bid and best ask: `mid = (bid + ask) / 2`.
+Used as a "fair value" estimate. Many analytics and PnL calculations use mid price.
+(Module 2: Order Book, Module 7: Position Tracker)
+
+**Order Flow** — The stream of buy and sell orders arriving at an exchange or trading
+venue. Analyzing order flow reveals supply/demand imbalances. "Toxic" order flow comes
+from informed traders who trade against market makers profitably.
+(Module 9: Market Data)
+
+**Price Discovery** — The process by which market prices are determined through the
+interaction of buyers and sellers. The order book is the primary mechanism for price
+discovery in electronic markets. A well-functioning market has efficient price discovery
+with tight spreads and adequate depth. (Module 2: Order Book)
+
+**Quote** — A firm offer to buy or sell at a specific price and quantity. Market makers
+are obligated to maintain continuous two-sided quotes (a bid and an ask). A quote
+includes: symbol, bid price, bid size, ask price, ask size, timestamp.
+(Module 9: Market Data)
+
+**Throughput** — The number of operations processed per unit of time. For trading
+systems: orders per second (OPS), messages per second (MPS), or fills per second.
+Our benchmark targets: > 2M SPSC messages/sec, > 5M Black-Scholes calculations/sec.
+(Module 14: Benchmarks)
+
+**Wire Protocol** — The format used to transmit data over a network connection. FIX
+(tag=value with SOH delimiter) is the dominant wire protocol for equities trading. Binary
+protocols (like ITCH/OUCH) offer lower latency. Our FIX parser handles the text-based
+protocol. (Module 8: FIX Protocol)
+
+---
+
+## Formulas Quick Reference
+
+For developers implementing financial calculations, here are the key formulas used
+throughout the platform:
+
+| Formula | Expression | Module |
+|---------|-----------|--------|
+| Black-Scholes Call | `C = S·N(d₁) - K·e^(-rT)·N(d₂)` | M4 |
+| Put-Call Parity | `C - P = S - K·e^(-rT)` | M4 |
+| d₁ | `[ln(S/K) + (r + σ²/2)T] / (σ√T)` | M4 |
+| d₂ | `d₁ - σ√T` | M4 |
+| Delta (Call) | `N(d₁)` | M5 |
+| Gamma | `N'(d₁) / (S·σ·√T)` | M5 |
+| Vega | `S·√T·N'(d₁)` | M5 |
+| Theta (Call) | `-(S·σ·N'(d₁))/(2√T) - r·K·e^(-rT)·N(d₂)` | M5 |
+| Discount Factor | `DF(T) = e^(-r·T)` | M10 |
+| Forward Rate | `f(t₁,t₂) = (r₂t₂ - r₁t₁)/(t₂ - t₁)` | M10 |
+| VWAP | `Σ(Pᵢ × Vᵢ) / Σ(Vᵢ)` | M7, M12 |
+| Realized PnL | `Σ(sell_proceeds) - Σ(buy_costs)` | M7 |
+| Unrealized PnL | `(current_price - avg_cost) × quantity` | M7 |
+| Historical Vol | `σ = std(daily_returns) × √252` | M5 |
+| VaR (parametric) | `VaR = μ - z_α × σ × √t` | M5 |
+
+---
+
 ## Quick Reference: Code ↔ Finance Mapping
 
 | Finance Concept | C++ Representation | Module |
