@@ -20,41 +20,37 @@ By default, GPU 0 cannot dereference a pointer that lives in GPU 1's memory — 
 
 The bandwidth between GPUs varies dramatically depending on the interconnect:
 
-| Interconnect | Bandwidth (per direction) | Latency | Typical Use |
-|---|---|---|---|
-| PCIe Gen4 x16 | ~25 GB/s | ~1–5 μs | Consumer / entry workstations |
-| PCIe Gen5 x16 | ~50 GB/s | ~1–5 μs | Next-gen workstations |
-| NVLink 3.0 (A100) | 25 GB/s per link, 600 GB/s total (12 links) | sub-μs | Data center HGX A100 |
-| NVLink 4.0 (H100) | 25 GB/s per link, 900 GB/s total (18 links) | sub-μs | Data center HGX H100 |
-| NVSwitch (full bisection) | 900 GB/s (H100) | sub-μs | DGX H100 — every GPU talks to every other at full BW |
+| Interconnect | Bandwidth (per dir) | Typical Use |
+|---|---|---|
+| PCIe Gen4 x16 | ~25 GB/s | Consumer workstations |
+| PCIe Gen5 x16 | ~50 GB/s | Next-gen workstations |
+| NVLink 3.0 (A100) | 600 GB/s total | Data center HGX A100 |
+| NVLink 4.0 (H100) | 900 GB/s total | Data center HGX H100 |
+| NVSwitch | 900 GB/s bisection | DGX H100 — full mesh |
 
 ### NVSwitch and DGX Topology
 
 In an **NVIDIA DGX H100** node, 8 H100 GPUs are connected through **NVSwitch**. NVSwitch acts as a crossbar — every GPU has a direct, full-bandwidth path to every other GPU. This is a **full mesh** topology at the hardware level. Contrast this with a **ring** topology (used in older NVLink systems without NVSwitch), where data must hop through intermediate GPUs.
 
-### GPUDirect RDMA
-
-**GPUDirect RDMA** allows a network adapter (InfiniBand HCA or RoCE NIC) to read/write GPU memory directly, bypassing the CPU and system memory entirely. This is critical for multi-node GPU clusters: GPU 0 on Node A can send a tensor directly to GPU 3 on Node B through the network fabric without any CPU-side memcpy.
+**GPUDirect RDMA** allows a network adapter (InfiniBand HCA or RoCE NIC) to read/write GPU memory directly, bypassing CPU and system memory. This is critical for multi-node clusters: GPU 0 on Node A sends a tensor directly to GPU 3 on Node B without any CPU-side memcpy.
 
 ### NCCL — The Collective Communication Library
 
-**NCCL** (NVIDIA Collective Communications Library) provides optimized implementations of collective operations:
-
+**NCCL** (NVIDIA Collective Communications Library) provides optimized collective operations:
 - **AllReduce** — every GPU contributes a buffer; result (e.g., sum) is placed on every GPU.
 - **AllGather** — each GPU contributes a chunk; every GPU gets the full concatenation.
 - **ReduceScatter** — reduce + scatter: each GPU gets a unique reduced chunk.
 - **Broadcast** — one GPU sends its buffer to all others.
 
-NCCL automatically selects the best algorithm (ring, tree, or direct) based on topology, message size, and GPU count.
+NCCL automatically selects the best algorithm (ring, tree, or direct) based on topology and message size.
 
 #### Ring AllReduce Algorithm
 
-The ring AllReduce is elegant. With N GPUs arranged in a logical ring, the algorithm proceeds in two phases:
+With N GPUs in a logical ring, the algorithm has two phases:
+1. **Reduce-Scatter** (N−1 steps): Each GPU sends a chunk to its neighbor and accumulates. After N−1 steps, each GPU holds the fully reduced version of one chunk.
+2. **AllGather** (N−1 steps): Each GPU sends its reduced chunk around the ring. After N−1 steps, every GPU has the complete result.
 
-1. **Reduce-Scatter phase** (N−1 steps): Each GPU sends a chunk to its neighbor and accumulates the received chunk. After N−1 steps, each GPU holds the fully reduced version of one chunk.
-2. **AllGather phase** (N−1 steps): Each GPU sends its fully reduced chunk around the ring. After N−1 steps, every GPU has the complete reduced result.
-
-Total data transferred per GPU: **2 × (N−1)/N × DataSize** — this scales with constant overhead per GPU regardless of GPU count.
+Total data per GPU: **2 × (N−1)/N × DataSize** — scales with constant overhead per GPU.
 
 ---
 
@@ -574,11 +570,11 @@ Implement a compute-heavy kernel (e.g., large vector dot product). Run it on 1 G
 ## 6. Solutions
 
 ### Solution 1 — GPU Inventory
-See Code Example 3.1 above. It enumerates all devices and checks P2P between all pairs.
+See Code Example 3.1 above — it enumerates all devices and checks P2P between all pairs.
 
-### Solution 2 — P2P Bandwidth Benchmark (Sketch)
+### Solution 2 — P2P Bandwidth Benchmark (Core Loop)
 ```cuda
-// Key loop (after enabling P2P):
+// After enabling P2P and allocating d_src on GPU 0, d_dst on GPU 1:
 for (size_t size = 1 << 20; size <= (1 << 28); size <<= 1) {
     cudaEvent_t start, stop;
     cudaEventCreate(&start); cudaEventCreate(&stop);
@@ -588,29 +584,19 @@ for (size_t size = 1 << 20; size <= (1 << 28); size <<= 1) {
         cudaMemcpyPeer(d_dst, 1, d_src, 0, size);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
-    float ms;
-    cudaEventElapsedTime(&ms, start, stop);
-    double bw = (double)size * REPEATS / (ms * 1e-3) / 1e9;
-    printf("%8zu MB  %.2f GB/s\n", size >> 20, bw);
+    float ms; cudaEventElapsedTime(&ms, start, stop);
+    printf("%8zu MB  %.2f GB/s\n", size>>20, (double)size*REPEATS/(ms*1e-3)/1e9);
 }
 ```
 
-### Solution 3 — Multi-GPU Matrix Fill (Sketch)
-```cuda
-__global__ void fillRows(float *data, int cols, int startRow) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int row = startRow + idx / cols;
-    if (idx < cols * gridDim.x)
-        data[idx] = (float)row;
-}
-// Split: GPU g handles rows [g*rowsPerGPU .. (g+1)*rowsPerGPU)
-```
+### Solution 3 — Multi-GPU Matrix Fill
+Split rows: GPU `g` handles rows `[g*rowsPerGPU .. (g+1)*rowsPerGPU)`. Kernel assigns `data[idx] = (float)(startRow + idx / cols)`.
 
 ### Solution 4 — NCCL Broadcast + Compute
-Use `ncclBroadcast(weights, weights, N, ncclFloat, 0, comms[i], streams[i])` inside a group, then launch a multiply kernel on each GPU.
+Use `ncclBroadcast(weights, weights, N, ncclFloat, 0, comms[i], streams[i])` inside a group, then launch a pointwise multiply kernel on each GPU.
 
 ### Solution 5 — Scaling Efficiency
-Run the kernel on 1 GPU, record T1. Split data across N GPUs, record TN. Efficiency = T1 / (N * TN). Expect ~90%+ on compute-bound kernels with minimal communication.
+Run kernel on 1 GPU → T1. Split across N GPUs → TN. Efficiency = T1 / (N × TN). Expect ~90%+ for compute-bound kernels with minimal communication.
 
 ---
 
@@ -683,43 +669,34 @@ Run the kernel on 1 GPU, record T1. Split data across N GPUs, record TN. Efficie
 
 ## 9. Chapter Summary
 
-Multi-GPU programming transforms a single-GPU CUDA application into a distributed system. The programmer must manage device selection (`cudaSetDevice`), enable peer-to-peer access for direct GPU-to-GPU communication, partition data across devices, and synchronize results. NVLink and NVSwitch provide the high-bandwidth interconnect that makes inter-GPU communication fast enough to keep GPUs fed, while GPUDirect RDMA extends this to multi-node clusters. NCCL handles the complexity of collective operations — its Ring AllReduce algorithm ensures that gradient synchronization scales efficiently with GPU count, sending only `2(N-1)/N` of the data volume per GPU regardless of the number of participants. In practice, data-parallel training on 8 GPUs achieves 90–95% linear scaling on large models, but Amdahl's Law reminds us that serial bottlenecks (data loading, CPU-bound preprocessing, small batch sizes) cap the achievable speedup. Mastering multi-GPU programming is non-negotiable for anyone working on large-scale AI/ML systems.
+Multi-GPU programming transforms a single-GPU CUDA application into a distributed system. The programmer manages device selection (`cudaSetDevice`), enables peer-to-peer access for direct GPU-to-GPU communication, partitions data across devices, and synchronizes results. NVLink and NVSwitch provide high-bandwidth interconnects, while GPUDirect RDMA extends this to multi-node clusters. NCCL's Ring AllReduce ensures gradient synchronization scales efficiently — sending only `2(N-1)/N` of the data per GPU regardless of participant count. In practice, data-parallel training on 8 GPUs achieves 90–95% linear scaling on large models, but Amdahl's Law reminds us that serial bottlenecks cap achievable speedup. Mastering multi-GPU programming is essential for large-scale AI/ML systems.
 
 ---
 
 ## 10. Real-World Insight — AI/ML Applications
 
-**Large Language Model Training**: GPT-4, Llama 3, and Gemini are trained on thousands of GPUs using data parallelism (FSDP/ZeRO) combined with tensor and pipeline parallelism. NCCL AllReduce is the heartbeat of every training step — it synchronizes gradients across all GPUs. On a DGX H100 system with NVSwitch, an AllReduce of 1 GB completes in ~1.2 ms across 8 GPUs.
+**Large Language Model Training**: GPT-4, Llama 3, and Gemini are trained on thousands of GPUs using data parallelism (FSDP/ZeRO) combined with tensor and pipeline parallelism. NCCL AllReduce synchronizes gradients every training step. On a DGX H100 with NVSwitch, AllReduce of 1 GB completes in ~1.2 ms across 8 GPUs.
 
-**Inference Serving**: Large models are split across GPUs using tensor parallelism. Each attention head or MLP shard runs on a different GPU, with AllReduce combining partial results. NVLink bandwidth directly determines the maximum achievable tokens-per-second.
+**Inference Serving**: Large models use tensor parallelism — each attention head or MLP shard runs on a different GPU, with AllReduce combining partial results. NVLink bandwidth directly determines max tokens-per-second.
 
-**Recommendation Systems**: Companies like Meta process trillion-parameter embedding tables that don't fit in one GPU. Multi-GPU model parallelism with AllGather is used to distribute embedding lookups.
+**Recommendation Systems**: Meta processes trillion-parameter embedding tables across GPUs using model parallelism with AllGather for distributed embedding lookups.
 
-**Scaling Numbers**: A single H100 delivers ~990 TFLOPS (FP16). An 8-GPU DGX H100 node delivers ~7.9 PFLOPS. A 256-GPU cluster (32 nodes with InfiniBand) can sustain ~200+ PFLOPS of effective training throughput when communication is properly overlapped with computation.
+**Scaling Numbers**: A single H100 delivers ~990 TFLOPS (FP16). An 8-GPU DGX H100 node: ~7.9 PFLOPS. A 256-GPU cluster can sustain ~200+ PFLOPS when communication is properly overlapped with computation.
 
 ---
 
 ## 11. Common Mistakes
 
-1. **Forgetting `cudaSetDevice` before allocations** — memory ends up on the wrong GPU, causing silent correctness errors or crashes on kernel launch.
-
-2. **Not enabling P2P before cross-GPU kernel access** — reading a pointer from another GPU without `cudaDeviceEnablePeerAccess` causes a segfault or ECC error.
-
-3. **Using `cudaMemcpy` instead of `cudaMemcpyPeer`** — standard memcpy between two device pointers on different GPUs silently routes through host memory, halving bandwidth.
-
-4. **Blocking synchronization between GPUs** — calling `cudaDeviceSynchronize()` on each GPU sequentially serializes the pipeline. Use per-GPU streams and synchronize only when necessary.
-
-5. **Ignoring NUMA topology** — in multi-socket systems, a GPU may be on a different NUMA node than the CPU thread managing it. Pin threads to the correct NUMA node for optimal PCIe throughput.
-
-6. **Small AllReduce messages** — NCCL has startup latency (~5 μs). Reducing tiny buffers individually wastes bandwidth. Fuse gradients into large AllReduce calls (bucket fusion).
-
-7. **Not using pinned memory for multi-GPU transfers** — pageable host memory cannot be used with `cudaMemcpyAsync`, forcing synchronous transfers and eliminating overlap.
-
-8. **Assuming P2P always uses NVLink** — on PCIe-only systems, `cudaDeviceEnablePeerAccess` succeeds but traffic goes over PCIe. Always benchmark to verify actual bandwidth.
-
-9. **Not overlapping communication with computation** — the key to scaling is launching the next batch's forward pass while AllReduce finishes on the current batch's gradients.
-
-10. **Ignoring Amdahl's Law** — if your data loading pipeline can only feed 2 GPUs, adding 6 more GPUs won't help. Profile the entire pipeline, not just the GPU kernels.
+1. **Forgetting `cudaSetDevice` before allocations** — memory ends up on the wrong GPU, causing silent errors or crashes.
+2. **Not enabling P2P before cross-GPU kernel access** — reading another GPU's pointer without `cudaDeviceEnablePeerAccess` causes a segfault.
+3. **Using `cudaMemcpy` instead of `cudaMemcpyPeer`** — standard memcpy between device pointers on different GPUs silently routes through host, halving bandwidth.
+4. **Blocking synchronization between GPUs** — calling `cudaDeviceSynchronize()` sequentially serializes the pipeline. Use per-GPU streams.
+5. **Ignoring NUMA topology** — a GPU on a different NUMA node than its managing CPU thread gets suboptimal PCIe throughput.
+6. **Small AllReduce messages** — NCCL has ~5 μs startup latency. Fuse gradients into large AllReduce calls (bucket fusion).
+7. **Not using pinned memory** — pageable memory prevents `cudaMemcpyAsync` from working, eliminating transfer-compute overlap.
+8. **Assuming P2P always uses NVLink** — on PCIe-only systems, P2P goes over PCIe. Always benchmark.
+9. **Not overlapping communication with computation** — launch the next forward pass while AllReduce finishes on current gradients.
+10. **Ignoring Amdahl's Law** — if data loading feeds only 2 GPUs, adding 6 more won't help.
 
 ---
 
@@ -727,20 +704,20 @@ Multi-GPU programming transforms a single-GPU CUDA application into a distribute
 
 ### Q1: How does `cudaSetDevice` work, and what happens if you allocate memory without calling it?
 
-**Answer**: `cudaSetDevice(id)` makes GPU `id` the active device for the calling host thread. All subsequent `cudaMalloc`, kernel launches (`<<<>>>`), and `cudaStream` operations target that device. If you never call `cudaSetDevice`, the default is device 0. A common bug in multi-GPU code is forgetting to switch devices before allocating, causing all memory to land on GPU 0 while kernels on GPU 1 try to access it — resulting in illegal memory access errors. Each host thread maintains its own "current device" state, so in multi-threaded code, each thread should call `cudaSetDevice` independently.
+**Answer**: `cudaSetDevice(id)` makes GPU `id` the active device for the calling host thread. All subsequent `cudaMalloc`, kernel launches, and stream operations target that device. If you never call it, the default is device 0. A common bug is forgetting to switch devices before allocating, causing memory to land on GPU 0 while kernels on GPU 1 try to access it — resulting in illegal memory access errors.
 
-### Q2: Explain the Ring AllReduce algorithm and why it scales well.
+### Q2: Explain Ring AllReduce and why it scales well.
 
-**Answer**: Ring AllReduce arranges N GPUs in a logical ring. The algorithm has two phases: Reduce-Scatter (N−1 steps) where each GPU sends one chunk to its neighbor and accumulates the received chunk, and AllGather (N−1 steps) where the fully reduced chunks are rotated around the ring. The total data each GPU sends is `2 × (N−1)/N × DataSize`. The key insight is that per-GPU bandwidth utilization is nearly constant regardless of N — adding more GPUs doesn't increase per-GPU communication volume. This makes Ring AllReduce bandwidth-optimal. The limitation is latency: the algorithm requires `2(N−1)` sequential steps, which hurts small messages. For large GPU counts, tree-based algorithms (used by NCCL for small messages) reduce latency from O(N) to O(log N).
+**Answer**: Ring AllReduce arranges N GPUs in a logical ring with two phases: Reduce-Scatter (N−1 steps where chunks accumulate) and AllGather (N−1 steps to distribute reduced chunks). Each GPU sends `2(N−1)/N × DataSize` total — bandwidth cost is nearly constant per GPU regardless of N. The limitation is latency: `2(N−1)` sequential steps hurts small messages. NCCL switches to tree algorithms (O(log N) latency) for small buffers.
 
 ### Q3: What is the difference between GPUDirect P2P and GPUDirect RDMA?
 
-**Answer**: **GPUDirect P2P** enables direct memory access between two GPUs **within the same node**, allowing one GPU to read/write another's memory over NVLink or PCIe without copying through host memory. **GPUDirect RDMA** extends this to the **network** — it allows a network adapter (InfiniBand HCA) to directly access GPU memory for inter-node transfers, bypassing both CPU and host memory entirely. P2P solves intra-node communication; RDMA solves inter-node communication. Together, they enable a GPU on Node A to effectively "see" a GPU on Node B's memory through the network, which is the foundation of multi-node training at scale.
+**Answer**: **GPUDirect P2P** enables direct memory access between two GPUs **within the same node** over NVLink or PCIe. **GPUDirect RDMA** extends this to the **network** — a network adapter (InfiniBand HCA) directly accesses GPU memory for inter-node transfers, bypassing both CPU and host memory. P2P solves intra-node communication; RDMA solves inter-node communication. Together they enable multi-node GPU clusters.
 
-### Q4: In data-parallel training, why do we AllReduce gradients rather than AllReduce weights?
+### Q4: Why do we AllReduce gradients rather than weights in data-parallel training?
 
-**Answer**: In data-parallel training, every GPU holds a complete copy of the model and processes a different mini-batch. After the backward pass, each GPU has locally computed gradients. We AllReduce (sum) the gradients because: (1) the sum of gradients from independent mini-batches equals the gradient of the combined batch (linearity of differentiation), (2) gradients are the same size as weights, so communication cost is equivalent either way, (3) after AllReduce, each GPU applies the **identical** optimizer step to the **identical** averaged gradient, ensuring all replicas stay synchronized without explicitly synchronizing weights. AllReducing weights would require an extra averaging step and wouldn't naturally compose with momentum/Adam state.
+**Answer**: Each GPU has locally computed gradients after the backward pass. We AllReduce (sum) gradients because: (1) the sum of gradients from independent mini-batches equals the gradient of the combined batch (linearity of differentiation), (2) after AllReduce, each GPU applies the identical optimizer step to identical averaged gradients, keeping all replicas synchronized without explicitly synchronizing weights.
 
-### Q5: How does NVSwitch differ from NVLink, and why does it matter for AllReduce performance?
+### Q5: How does NVSwitch differ from NVLink for AllReduce performance?
 
-**Answer**: **NVLink** is a point-to-point interconnect — each link connects exactly two GPUs. In systems without NVSwitch, GPUs are connected in a ring or partial mesh, meaning some GPU pairs communicate through intermediate hops. **NVSwitch** is a crossbar switch that connects all GPUs simultaneously with full bisection bandwidth — every GPU can communicate with every other GPU at the same time at full link speed. For AllReduce, NVSwitch enables **one-step direct** algorithms where each GPU sends its data directly to all others, rather than multi-hop ring algorithms. On an 8-GPU DGX H100 with NVSwitch, NCCL can complete AllReduce in fewer steps with higher bandwidth utilization compared to a ring topology, reducing the communication overhead from ~5% to ~2% of total training step time for large models.
+**Answer**: **NVLink** is point-to-point — some GPU pairs require intermediate hops in a ring topology. **NVSwitch** is a crossbar providing full bisection bandwidth — every GPU communicates directly with every other at full link speed simultaneously. For AllReduce, NVSwitch enables one-step direct algorithms rather than multi-hop rings, reducing communication overhead from ~5% to ~2% of training step time for large models.

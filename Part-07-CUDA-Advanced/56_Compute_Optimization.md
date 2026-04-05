@@ -7,19 +7,18 @@
 ## Theory — Maximizing Compute Throughput
 
 GPU compute optimization is the art of keeping every functional unit busy every cycle.
-A modern NVIDIA SM contains dozens of CUDA cores, load/store units, special-function
-units (SFUs), and tensor cores. If any of these sit idle because of poor scheduling,
-divergent branches, or register pressure, you leave performance on the table.
+A modern SM contains CUDA cores, load/store units, SFUs, and tensor cores. If any sit
+idle due to poor scheduling, divergent branches, or register pressure, you leave
+performance on the table.
 
-**Occupancy** measures how many warps are *resident* on an SM relative to the hardware
-maximum. Higher occupancy gives the warp scheduler more choices to hide latency, but
-occupancy alone does not guarantee performance — instruction-level parallelism (ILP)
-and memory access patterns matter equally.
+**Occupancy** measures resident warps on an SM relative to the hardware maximum.
+Higher occupancy gives the warp scheduler more choices to hide latency, but occupancy
+alone does not guarantee performance — ILP and memory patterns matter equally.
 
-The **roofline model** frames every kernel as either *compute-bound* or *memory-bound*.
-Arithmetic intensity (FLOPs per byte loaded from DRAM) determines which regime you
-are in. Compute-bound kernels benefit from instruction mix tuning and ILP; memory-bound
-kernels benefit from caching, coalescing, and data reuse.
+The **roofline model** frames every kernel as *compute-bound* or *memory-bound*.
+Arithmetic intensity (FLOPs per byte from DRAM) determines the regime. Compute-bound
+kernels benefit from instruction tuning and ILP; memory-bound kernels benefit from
+caching, coalescing, and data reuse.
 
 ### Key Hardware Limits per SM (Ampere A100 example)
 
@@ -42,28 +41,23 @@ giving 50% occupancy (1024 / 2048).
 
 ### What is Compute Optimization?
 
-Compute optimization means restructuring kernel code so the SM's arithmetic pipelines
-stay saturated. This includes maximizing occupancy, increasing ILP, eliminating branch
-divergence, using fused instructions (FMA), and choosing the right instruction mix.
+Restructuring kernel code so the SM's arithmetic pipelines stay saturated — maximizing
+occupancy, ILP, fused instructions, and eliminating branch divergence.
 
 ### Why Does It Matter?
 
-- A kernel at 25% occupancy may leave 75% of the SM's latency-hiding capability unused.
-- Branch divergence serializes execution within a warp — a 32-thread warp can degrade
-  to effectively 1 thread if every lane takes a different path.
-- Missing a single FMA fusion doubles the instruction count for multiply-add patterns,
-  cutting throughput in half for compute-bound kernels.
+- 25% occupancy leaves 75% of latency-hiding capability unused.
+- Branch divergence can degrade a 32-thread warp to effectively 1 thread.
+- Missing FMA fusion doubles instruction count for multiply-add patterns.
 
 ### How to Optimize
 
-1. **Tune block size** — use `cudaOccupancyMaxPotentialBlockSize` to find the sweet spot.
-2. **Increase ILP** — have each thread process multiple elements so independent
-   instructions can overlap with memory latency.
-3. **Unroll loops** — reduce branch overhead and expose more ILP with `#pragma unroll`.
-4. **Minimize divergence** — restructure conditionals so threads within a warp take
-   the same path.
-5. **Use fast math** — `__fmul_rn`, `__fdividef`, `__expf`, `--use_fast_math`.
-6. **Maximize FMA** — structure arithmetic as `a * b + c` so the compiler can fuse.
+1. **Tune block size** — use `cudaOccupancyMaxPotentialBlockSize`.
+2. **Increase ILP** — process multiple elements per thread.
+3. **Unroll loops** — `#pragma unroll` reduces branch overhead, exposes ILP.
+4. **Minimize divergence** — restructure so warp threads take the same path.
+5. **Use fast math** — `__fdividef`, `__expf`, `--use_fast_math`.
+6. **Maximize FMA** — write `a * b + c` so the compiler can fuse.
 
 ---
 
@@ -551,48 +545,25 @@ int main() {
 
 ### Solution 2 — ILP Exploration (sketch)
 
-Process 2 and 8 elements per thread following the pattern in Code Example 2. Key
-change for ILP-8:
-
-```cuda
-__global__ void scale_ilp8(float *out, const float *in, float s, int n) {
-    int base = (blockIdx.x * blockDim.x + threadIdx.x) * 8;
-    if (base + 7 < n) {
-        float a0=in[base], a1=in[base+1], a2=in[base+2], a3=in[base+3];
-        float a4=in[base+4], a5=in[base+5], a6=in[base+6], a7=in[base+7];
-        out[base]  =a0*s+1.f; out[base+1]=a1*s+1.f;
-        out[base+2]=a2*s+1.f; out[base+3]=a3*s+1.f;
-        out[base+4]=a4*s+1.f; out[base+5]=a5*s+1.f;
-        out[base+6]=a6*s+1.f; out[base+7]=a7*s+1.f;
-    }
-}
-```
-
-Grid size becomes `N/8/BLOCK`. On most GPUs, ILP-4 captures the majority of the
-benefit; ILP-8 may yield diminishing returns or hurt due to register pressure.
+Process 2 and 8 elements per thread following the ILP-4 pattern from Code Example 2.
+For ILP-8, each thread loads/stores 8 elements — grid becomes `N/8/BLOCK`. On most
+GPUs, ILP-4 captures the majority of benefit; ILP-8 may hurt due to register pressure.
 
 ### Solution 3 — Divergence Profiling
 
 ```bash
 ncu --metrics smsp__thread_inst_executed_pred_on.sum,\
-smsp__thread_inst_executed.sum \
-./branch_divergence
+smsp__thread_inst_executed.sum ./branch_divergence
 ```
 
-The divergent kernel will show `pred_on / total` ≈ 0.5 (half the threads are masked
-at any given branch). The uniform kernel shows a ratio close to 1.0.
+Divergent kernel shows `pred_on / total` ≈ 0.5; the uniform kernel shows ≈ 1.0.
 
 ### Solution 4 — Roofline Classification (analysis)
 
-For matrix-vector multiply y = A·x where A is M×N:
-- FLOPs = 2·M·N (one multiply + one add per element of A)
-- Bytes = (M·N + N + M) × 4 ≈ 4·M·N for large M, N
-- Arithmetic intensity ≈ 2·M·N / (4·M·N) = 0.5 FLOP/byte
-
-At 0.5 FLOP/byte, matvec is firmly **memory-bound** on any modern GPU (the ridge
-point is typically at 10–50 FLOP/byte). Optimization should focus on memory access
-patterns: coalesced loads of A, shared-memory caching of x tiles, and using FP16
-to double effective bandwidth.
+For y = A·x where A is M×N: FLOPs = 2·M·N, Bytes ≈ 4·M·N.
+Arithmetic intensity ≈ 0.5 FLOP/byte — firmly **memory-bound** (ridge point is
+10–50 FLOP/byte). Optimize memory access patterns: coalesced loads, shared-memory
+caching of x tiles, FP16 to double effective bandwidth.
 
 ---
 
@@ -650,38 +621,29 @@ to double effective bandwidth.
 
 ## Key Takeaways
 
-- **Occupancy is necessary but not sufficient** — 100% occupancy with poor memory
-  patterns still yields low performance. Aim for ≥50% then focus on ILP and memory.
-- **ILP multiplies effective throughput** — processing 4 elements per thread gives
-  the scheduler 4× more independent instructions to overlap with latency.
-- **Branch divergence is a warp-level problem** — divergence between warps is free;
-  divergence within a warp serializes execution paths.
-- **`#pragma unroll` is a strong hint** — for small, known-trip-count loops it
-  eliminates branch overhead and enables further compiler optimizations.
-- **FMA is the most important single instruction** — structure arithmetic as `a*b+c`
-  whenever possible; it halves instruction count for multiply-add patterns.
-- **The roofline model classifies every kernel** — memory-bound kernels need better
-  access patterns; compute-bound kernels need instruction optimization.
-- **Use the occupancy API** — `cudaOccupancyMaxPotentialBlockSize` removes guesswork
-  from block size selection.
-- **Fast math intrinsics trade accuracy for speed** — `__fdividef`, `__expf`, and
-  `--use_fast_math` can provide 2-5× speedup for transcendental-heavy kernels.
+- **Occupancy is necessary but not sufficient** — aim for ≥50% then focus on ILP.
+- **ILP multiplies throughput** — 4 elements/thread gives 4× more independent work.
+- **Branch divergence is warp-level** — divergence between warps is free; within a
+  warp it serializes execution.
+- **`#pragma unroll`** eliminates branch overhead for small, known-trip-count loops.
+- **FMA is critical** — write `a*b+c` in one expression to enable fusion.
+- **Roofline classifies every kernel** — memory-bound needs better access patterns;
+  compute-bound needs instruction optimization.
+- **Use the occupancy API** — removes guesswork from block size selection.
+- **Fast math intrinsics** (`__fdividef`, `__expf`) trade accuracy for 2-5× speedup.
 
 ---
 
 ## Chapter Summary
 
-Compute optimization on the GPU is a multi-dimensional problem that begins with
-understanding where your kernel sits on the roofline. If it is memory-bound, no amount
-of instruction tuning will help — you must improve data reuse and access patterns
-first. If it is compute-bound, the tools in this chapter become critical: maximize
-occupancy to give the warp scheduler enough warps to hide latency, increase ILP so
-each thread exposes independent work, unroll loops to reduce control-flow overhead,
-eliminate branch divergence to keep all 32 lanes active, and use fused instructions
-(FMA) and fast-math intrinsics to squeeze the most out of every clock cycle. The CUDA
-occupancy API and profiling tools like Nsight Compute make the analysis data-driven
-rather than guesswork. Mastering compute optimization separates a kernel that merely
-runs on the GPU from one that truly exploits the hardware.
+Compute optimization on the GPU begins with understanding where your kernel sits on
+the roofline. Memory-bound kernels need data reuse improvements; compute-bound kernels
+benefit from the techniques in this chapter: maximize occupancy for latency hiding,
+increase ILP so each thread exposes independent work, unroll loops to reduce control
+overhead, eliminate divergence to keep all 32 lanes active, and use FMA and fast-math
+intrinsics. The CUDA occupancy API and Nsight Compute make the analysis data-driven.
+Mastering compute optimization separates a kernel that merely runs on a GPU from one
+that truly exploits the hardware.
 
 ---
 
@@ -689,44 +651,36 @@ runs on the GPU from one that truly exploits the hardware.
 
 | Technique | AI/ML Application |
 |-----------|-------------------|
-| **Occupancy tuning** | Convolution kernels in cuDNN dynamically select block size per layer shape. Transformer attention kernels (FlashAttention) carefully balance occupancy with shared memory to maximize throughput. |
-| **ILP** | GEMM implementations in cuBLAS process 4–8 output elements per thread, enabling the register file to serve as a fast accumulator while global memory loads are in flight. |
-| **Loop unrolling** | Inner loops of reduction kernels (softmax, layer-norm) are fully unrolled to eliminate branch overhead in performance-critical training paths. |
-| **Branch divergence** | Sparse attention patterns (e.g., in Longformer, BigBird) require careful masking strategies to avoid per-thread divergence when computing partial attention matrices. |
-| **FMA / fast math** | Mixed-precision training uses FP16 FMA on tensor cores. Activation functions (GELU, SiLU) use `__expf` for fast approximation during inference, trading sub-ULP accuracy for 3× throughput. |
-| **Roofline analysis** | Framework developers (PyTorch, TensorRT) use roofline plots to decide whether to fuse operators — fusing two memory-bound kernels increases arithmetic intensity above the ridge point. |
+| **Occupancy tuning** | cuDNN selects block size per layer shape; FlashAttention balances occupancy with shared memory for peak throughput. |
+| **ILP** | cuBLAS GEMM processes 4–8 elements/thread, using registers as fast accumulators while global loads are in flight. |
+| **Loop unrolling** | Reduction kernels (softmax, layer-norm) fully unroll inner loops in critical training paths. |
+| **Branch divergence** | Sparse attention (Longformer, BigBird) needs careful masking to avoid per-thread divergence. |
+| **FMA / fast math** | Mixed-precision training uses FP16 FMA on tensor cores; activations (GELU, SiLU) use `__expf` for 3× inference speedup. |
+| **Roofline analysis** | PyTorch/TensorRT use roofline to decide operator fusion — fusing two memory-bound kernels raises arithmetic intensity above the ridge point. |
 
 ---
 
 ## Common Mistakes
 
-1. **Chasing 100% occupancy blindly** — increasing occupancy beyond a threshold often
-   yields no benefit and may hurt by increasing register spilling to local memory.
+1. **Chasing 100% occupancy blindly** — beyond a threshold, more occupancy often yields
+   no benefit and may cause register spilling.
 
-2. **Ignoring register pressure when increasing ILP** — processing 8 elements per
-   thread requires 8× the registers for temporaries, which can reduce occupancy
-   below the useful threshold.
+2. **Ignoring register pressure with high ILP** — ILP-8 needs 8× the temporaries,
+   which can crush occupancy.
 
-3. **Branching on `threadIdx.x`** — conditions like `if (threadIdx.x < 16)` cause
-   50% divergence in every warp. Restructure to branch on `warpId` or block-level
-   conditions.
+3. **Branching on `threadIdx.x`** — `if (threadIdx.x < 16)` diverges every warp.
+   Branch on `warpId` or block-level conditions instead.
 
-4. **Using `#pragma unroll` on variable-trip-count loops** — the compiler cannot
-   unroll a loop whose bounds are runtime-dependent. Use a compile-time constant or
-   template parameter.
+4. **Unrolling variable-trip-count loops** — the compiler cannot unroll runtime bounds.
 
-5. **Forgetting FMA ordering** — writing `c = a * b; c = c + d;` as two statements
-   may prevent the compiler from fusing. Write `c = a * b + d;` in a single expression.
+5. **Breaking FMA fusion** — `c = a * b; c = c + d;` as two statements may prevent
+   fusion. Write `c = a * b + d;` instead.
 
-6. **Overusing `--use_fast_math` globally** — this flag affects ALL floating-point
-   operations. Prefer selective intrinsics (`__fmaf_rn`, `__fdividef`) for code that
-   needs precision in some paths.
+6. **`--use_fast_math` globally** — affects ALL operations. Use selective intrinsics.
 
-7. **Not profiling before optimizing** — applying compute optimizations to a
-   memory-bound kernel wastes effort. Always run `ncu` first to classify the kernel.
+7. **Not profiling first** — compute-optimizing a memory-bound kernel wastes effort.
 
-8. **Setting block size to non-multiples of 32** — threads are scheduled in warps of
-   32. A block of 100 threads wastes 28 threads in the last warp (padding to 128).
+8. **Block sizes not multiples of 32** — wastes threads in the last warp.
 
 ---
 
@@ -734,51 +688,37 @@ runs on the GPU from one that truly exploits the hardware.
 
 ### Q1: How do you determine whether a kernel is compute-bound or memory-bound?
 
-**Answer:** Use the roofline model. Calculate the kernel's arithmetic intensity
-(FLOPs performed ÷ bytes transferred from/to DRAM). Compare this to the GPU's ridge
-point (peak FLOP/s ÷ peak bandwidth). If the kernel's arithmetic intensity is below
-the ridge point, it is memory-bound; above it, compute-bound. Practically, profile
-with `ncu` and check `sm__throughput` vs `dram__throughput` — whichever is closer to
-its peak is the bottleneck. For memory-bound kernels, optimize access patterns and
-data reuse; for compute-bound, optimize instruction mix and ILP.
+**Answer:** Use the roofline model. Calculate arithmetic intensity (FLOPs ÷ bytes
+from/to DRAM) and compare to the GPU's ridge point (peak FLOP/s ÷ peak bandwidth).
+Below the ridge → memory-bound; above → compute-bound. Profile with `ncu`: check
+`sm__throughput` vs `dram__throughput` — whichever is closer to peak is the bottleneck.
 
 ### Q2: Explain the trade-off between occupancy and ILP.
 
-**Answer:** Occupancy hides memory latency by having many warps ready to execute while
-others stall on loads. ILP hides latency within a single thread by issuing independent
-instructions back-to-back. Increasing ILP typically requires more registers per thread
-(more temporaries), which reduces occupancy. The optimal balance depends on the kernel:
-a memory-latency-dominated kernel needs higher occupancy; a compute-heavy kernel with
-little memory access can thrive at lower occupancy with high ILP. The Volkov technique
-shows that 25% occupancy with ILP-4 can outperform 100% occupancy with ILP-1.
+**Answer:** Occupancy hides memory latency via many resident warps; ILP hides latency
+within a single thread via independent instructions. Increasing ILP requires more
+registers, which reduces occupancy. The Volkov technique shows 25% occupancy with
+ILP-4 can outperform 100% occupancy with ILP-1 for compute-heavy kernels.
 
 ### Q3: What happens during branch divergence and how do you avoid it?
 
-**Answer:** When threads within a warp take different paths at a conditional branch,
-the hardware serializes execution: it runs one path with the divergent threads masked
-off, then runs the other path with the first group masked. This effectively halves (or
-worse) the warp's throughput. Avoidance strategies: (1) restructure conditions to
-branch on warp-aligned boundaries (e.g., `warpId` instead of `threadIdx.x`), (2) use
-predication or branchless arithmetic (`result = cond * valA + (1-cond) * valB`),
-(3) sort input data so adjacent threads process similar cases, (4) use separate
-kernels for different code paths.
+**Answer:** When threads within a warp take different branch paths, the hardware
+serializes: it runs one path with divergent threads masked, then the other path.
+This halves throughput. Avoid by: (1) branching on warp-aligned boundaries (`warpId`),
+(2) using branchless arithmetic, (3) sorting data so adjacent threads take the same
+path, (4) using separate kernels for different code paths.
 
 ### Q4: When should you NOT use `#pragma unroll`?
 
-**Answer:** Avoid unrolling when: (1) the loop trip count is large or unknown at
-compile time — the compiler cannot unroll and may generate worse code; (2) the loop
-body is large — unrolling inflates the instruction cache footprint and increases
-register pressure, potentially hurting occupancy; (3) the loop already matches the
-pipeline depth — additional unrolling yields no further ILP benefit. Always verify with
-`ncu` or `--ptxas-options=-v` (to check register count) that unrolling actually helps.
+**Answer:** Avoid unrolling when: (1) trip count is runtime-variable — use compile-time
+constants; (2) the loop body is large — unrolling inflates icache and register pressure;
+(3) the loop already matches pipeline depth. Verify with `--ptxas-options=-v` that
+register count doesn't spike after unrolling.
 
 ### Q5: How does `cudaOccupancyMaxPotentialBlockSize` work and when would you override it?
 
-**Answer:** This API inspects the kernel's register usage, shared memory requirements,
-and device limits, then solves for the block size that maximizes theoretical occupancy.
-It returns both the optimal block size and the minimum grid size needed to fill the
-device. You might override it when: (1) the kernel uses dynamic shared memory that
-the API doesn't know about — pass the `dynamicSMemSize` parameter or a functor;
-(2) you want lower occupancy intentionally to give each thread more registers for ILP;
-(3) the kernel has specific block-dimension requirements (e.g., must be 2D for a tiled
-algorithm). The API provides a starting point, not the final answer — always benchmark.
+**Answer:** The API inspects register usage, shared memory, and device limits, then
+solves for the block size maximizing theoretical occupancy. Override it when: (1) the
+kernel uses dynamic shared memory the API doesn't know about; (2) you want lower
+occupancy for more registers/ILP; (3) the kernel requires specific 2D block dimensions.
+The API is a starting point — always benchmark the result.

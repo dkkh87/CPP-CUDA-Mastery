@@ -361,26 +361,13 @@ nsys stats nvtx_report.nsys-rep
 
 ---
 
-## Code Example 4 — Coalesced + Vectorised Load (Iteration 3)
+## Code Example 4 — Coalesced + Unrolled Kernel (Iteration 3)
+
+This version builds on V2 by adding `__restrict__` qualifiers and `#pragma unroll` on the inner loop. Uses the same CHECK_CUDA macro and main() harness as V2 — only the kernel changes:
 
 ```cuda
-// file: matmul_v3_vec.cu
-#include <cstdio>
-#include <cstdlib>
-#include <cuda_runtime.h>
-
-#define CHECK_CUDA(call)                                                   \
-    do {                                                                   \
-        cudaError_t err = (call);                                          \
-        if (err != cudaSuccess) {                                          \
-            fprintf(stderr, "CUDA error at %s:%d — %s\n", __FILE__,       \
-                    __LINE__, cudaGetErrorString(err));                     \
-            exit(EXIT_FAILURE);                                            \
-        }                                                                  \
-    } while (0)
-
+// file: matmul_v3_vec.cu  (kernel only — same main() as V2)
 #define TILE 32
-#define VEC  4   // float4 loads = 128-bit transactions
 
 __global__ void matmul_vec(const float* __restrict__ A,
                            const float* __restrict__ B,
@@ -393,23 +380,14 @@ __global__ void matmul_vec(const float* __restrict__ A,
     float sum = 0.0f;
 
     for (int t = 0; t < N; t += TILE) {
-        // Load A tile — row-major, coalesced across threadIdx.x
-        if (row < N && (t + threadIdx.x) < N)
-            sA[threadIdx.y][threadIdx.x] = A[row * N + t + threadIdx.x];
-        else
-            sA[threadIdx.y][threadIdx.x] = 0.0f;
-
-        // Load B tile — coalesced because col varies with threadIdx.x
-        if ((t + threadIdx.y) < N && col < N)
-            sB[threadIdx.y][threadIdx.x] = B[(t + threadIdx.y) * N + col];
-        else
-            sB[threadIdx.y][threadIdx.x] = 0.0f;
-
+        sA[threadIdx.y][threadIdx.x] =
+            (row < N && (t + threadIdx.x) < N) ? A[row * N + t + threadIdx.x] : 0.0f;
+        sB[threadIdx.y][threadIdx.x] =
+            ((t + threadIdx.y) < N && col < N) ? B[(t + threadIdx.y) * N + col] : 0.0f;
         __syncthreads();
 
-        // Unrolled inner product
         #pragma unroll
-        for (int k = 0; k < TILE; k += VEC) {
+        for (int k = 0; k < TILE; k += 4) {
             sum += sA[threadIdx.y][k]     * sB[k][threadIdx.x];
             sum += sA[threadIdx.y][k + 1] * sB[k + 1][threadIdx.x];
             sum += sA[threadIdx.y][k + 2] * sB[k + 2][threadIdx.x];
@@ -417,54 +395,8 @@ __global__ void matmul_vec(const float* __restrict__ A,
         }
         __syncthreads();
     }
-
     if (row < N && col < N)
         C[row * N + col] = sum;
-}
-
-int main() {
-    const int N = 1024;
-    size_t bytes = N * N * sizeof(float);
-
-    float *h_A = (float*)malloc(bytes);
-    float *h_B = (float*)malloc(bytes);
-    float *h_C = (float*)malloc(bytes);
-    for (int i = 0; i < N * N; ++i) {
-        h_A[i] = static_cast<float>(rand()) / RAND_MAX;
-        h_B[i] = static_cast<float>(rand()) / RAND_MAX;
-    }
-
-    float *d_A, *d_B, *d_C;
-    CHECK_CUDA(cudaMalloc(&d_A, bytes));
-    CHECK_CUDA(cudaMalloc(&d_B, bytes));
-    CHECK_CUDA(cudaMalloc(&d_C, bytes));
-    CHECK_CUDA(cudaMemcpy(d_A, h_A, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_B, h_B, bytes, cudaMemcpyHostToDevice));
-
-    dim3 block(TILE, TILE);
-    dim3 grid((N + TILE - 1) / TILE, (N + TILE - 1) / TILE);
-
-    matmul_vec<<<grid, block>>>(d_A, d_B, d_C, N);
-    CHECK_CUDA(cudaDeviceSynchronize());
-
-    cudaEvent_t start, stop;
-    CHECK_CUDA(cudaEventCreate(&start));
-    CHECK_CUDA(cudaEventCreate(&stop));
-    CHECK_CUDA(cudaEventRecord(start));
-    matmul_vec<<<grid, block>>>(d_A, d_B, d_C, N);
-    CHECK_CUDA(cudaEventRecord(stop));
-    CHECK_CUDA(cudaEventSynchronize(stop));
-
-    float ms = 0.0f;
-    CHECK_CUDA(cudaEventElapsedTime(&ms, start, stop));
-    double gflops = (2.0 * N * N * N) / (ms * 1e6);
-    printf("Vec    : %.2f ms, %.1f GFLOP/s\n", ms, gflops);
-
-    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
-    free(h_A); free(h_B); free(h_C);
-    CHECK_CUDA(cudaEventDestroy(start));
-    CHECK_CUDA(cudaEventDestroy(stop));
-    return 0;
 }
 ```
 

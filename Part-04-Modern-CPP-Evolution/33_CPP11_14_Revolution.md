@@ -510,10 +510,10 @@ A) Calls the move constructor  B) Transfers memory  C) Casts to rvalue reference
 
 **Q2.** Output of `auto f=[x=0]()mutable{return ++x;}; cout<<f()<<f()<<f();`?
 A) 000  B) 111  C) 123  D) Compile error
-**Answer:** C — `mutable` allows modification; the lambda maintains state.
+**Answer:** C — `mutable` allows modification; the lambda maintains state across calls.
 
 **Q3.** Which prevents narrowing? A) `int x=3.14;` B) `int x(3.14);` C) `int x{3.14};`
-**Answer:** C — brace init rejects narrowing conversions.
+**Answer:** C — brace init rejects narrowing conversions; A and B silently narrow.
 
 **Q4.** What happens when a `shared_ptr` is copied?
 A) Deep copy  B) Atomic ref_count increment  C) Ownership transfer  D) weak_ptr created
@@ -536,12 +536,11 @@ A) Faster  B) Has its own type `std::nullptr_t`, no overload ambiguity  C) `NULL
 ## Key Takeaways
 
 - **`auto`** cuts verbosity but drops top-level qualifiers — use `const auto&` deliberately.
-- **Move semantics** transfer resources in O(1) instead of O(n) copies.
-- **`std::move` is a cast**, not an operation.
+- **Move semantics** transfer resources in O(1) instead of O(n) copies; `std::move` is a cast.
 - **Lambdas** replaced functor classes; C++14 generic lambdas add template-like power.
 - **Smart pointers** encode ownership in the type system — default to `unique_ptr`.
 - **`constexpr`** shifts work to compile time; C++14 removes the single-statement limit.
-- **Variadic templates** enable type-safe variadic functions.
+- **Variadic templates** enable type-safe variadic functions replacing C-style `va_args`.
 - **`enum class`** scopes names and blocks implicit int conversion.
 - **Brace init** catches narrowing bugs the compiler used to accept silently.
 
@@ -553,18 +552,17 @@ C++11/14 transformed C++ from verbose and error-prone into a modern systems powe
 semantics eliminated costly deep copies. Smart pointers made manual memory management the
 exception. Lambdas brought functional programming to STL algorithms. `auto`/`decltype` cut
 noise while preserving type safety. C++14 polished the edges — generic lambdas, relaxed
-`constexpr`, `make_unique`, and return-type deduction — establishing the foundation for
-C++17, C++20, and beyond.
+`constexpr`, `make_unique` — establishing the foundation for C++17, C++20, and beyond.
 
 ---
 
 ## Real-World Insight
 
-Migrating a trading firm's pipeline from C++03 to C++11 yielded **23% throughput gains** by
-adding move constructors — eliminating millions of `std::string` deep copies per second. Game
-engines adopted smart pointers to eliminate use-after-free crashes. `std::chrono` replaced
-`gettimeofday()` with type-safe duration arithmetic, preventing unit-mismatch production bugs.
-Generic lambdas reduced each async handler from a 20-line functor class to a single line.
+Migrating a trading firm's pipeline from C++03 to C++11 yielded **23% throughput gains** via
+move constructors — eliminating millions of `std::string` deep copies per second. Game engines
+adopted smart pointers to eliminate use-after-free crashes. `std::chrono` replaced error-prone
+`gettimeofday()` with type-safe duration arithmetic. Generic lambdas reduced async handlers
+from 20-line functor classes to single-line lambdas.
 
 ---
 
@@ -588,20 +586,17 @@ An **xvalue** is an lvalue cast to rvalue via `std::move(x)`, signaling resource
 Overload resolution uses these categories to choose copy (`const T&`) vs move (`T&&`) overloads.
 
 **Q2: Why mark move constructors `noexcept`?**
-`std::vector` provides a strong exception-safety guarantee during reallocation. If the move
-constructor can throw, `vector` uses `std::move_if_noexcept` and falls back to copies. Omitting
-`noexcept` silently kills move performance in every STL container.
+`std::vector` provides a strong exception-safety guarantee. If moves can throw, `vector` uses
+`move_if_noexcept` and falls back to copies — silently killing move performance.
 
 **Q3: When use `weak_ptr` over `shared_ptr`?**
 To break **cyclic references** (e.g., parent ↔ child trees) that prevent deallocation, and for
 **caches** where you observe resource lifetime via `lock()` without extending it.
 
 **Q4: `constexpr` in C++11 vs C++14?**
-C++11 restricted `constexpr` to a single return statement (ternary only). C++14 allows local
-variables, loops, `if`/`else`, and multiple statements — making compile-time lookup tables and
-hashing practical.
+C++11 limited `constexpr` to a single return statement. C++14 allows local variables, loops,
+and `if`/`else` — making compile-time lookup tables and hashing practical.
 
 **Q5: What problem do C++14 generic lambdas solve?**
 C++11 lambdas require explicit parameter types. Generic lambdas accept `auto` parameters,
-generating a templated `operator()`, so one lambda works across all types supporting the
-required operations — eliminating code duplication in algorithm callbacks.
+generating a templated `operator()` — one lambda works across all compatible types.

@@ -222,91 +222,60 @@ int main() {
         }                                                             \
     } while (0)
 
-// AoS layout
-struct Particle { float x, y, z, w; };
+struct Particle { float x, y, z, w; }; // AoS layout
 
 __global__ void scale_aos(Particle* p, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < N) {
-        // Stride-4 access: thread 0 reads offset 0, thread 1 reads offset 16
-        p[i].x *= 2.0f;
-        p[i].y *= 2.0f;
-        p[i].z *= 2.0f;
-        p[i].w *= 2.0f;
-    }
+    if (i < N) { p[i].x *= 2.0f; p[i].y *= 2.0f; p[i].z *= 2.0f; p[i].w *= 2.0f; }
 }
-
-// SoA layout
-struct ParticlesSoA {
-    float *x, *y, *z, *w;
-};
 
 __global__ void scale_soa(float* __restrict__ x, float* __restrict__ y,
                           float* __restrict__ z, float* __restrict__ w, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < N) {
-        // Stride-1 access: thread 0 reads offset 0, thread 1 reads offset 4
-        x[i] *= 2.0f;
-        y[i] *= 2.0f;
-        z[i] *= 2.0f;
-        w[i] *= 2.0f;
-    }
+    if (i < N) { x[i] *= 2.0f; y[i] *= 2.0f; z[i] *= 2.0f; w[i] *= 2.0f; }
 }
 
 int main() {
-    const int N = 1 << 22; // 4M particles
+    const int N = 1 << 22;
     cudaEvent_t start, stop;
     CHECK_CUDA(cudaEventCreate(&start));
     CHECK_CUDA(cudaEventCreate(&stop));
 
-    // --- AoS ---
     Particle* d_aos;
     CHECK_CUDA(cudaMalloc(&d_aos, N * sizeof(Particle)));
     CHECK_CUDA(cudaMemset(d_aos, 1, N * sizeof(Particle)));
-
-    scale_aos<<<(N+255)/256, 256>>>(d_aos, N);  // warmup
+    scale_aos<<<(N+255)/256, 256>>>(d_aos, N);
     CHECK_CUDA(cudaDeviceSynchronize());
-
     CHECK_CUDA(cudaEventRecord(start));
-    for (int i = 0; i < 100; i++)
-        scale_aos<<<(N+255)/256, 256>>>(d_aos, N);
+    for (int i = 0; i < 100; i++) scale_aos<<<(N+255)/256, 256>>>(d_aos, N);
     CHECK_CUDA(cudaEventRecord(stop));
     CHECK_CUDA(cudaEventSynchronize(stop));
-
     float ms_aos = 0;
     CHECK_CUDA(cudaEventElapsedTime(&ms_aos, start, stop));
 
-    // --- SoA ---
     float *d_x, *d_y, *d_z, *d_w;
     CHECK_CUDA(cudaMalloc(&d_x, N * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_y, N * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_z, N * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_w, N * sizeof(float)));
-
-    scale_soa<<<(N+255)/256, 256>>>(d_x, d_y, d_z, d_w, N);  // warmup
+    scale_soa<<<(N+255)/256, 256>>>(d_x, d_y, d_z, d_w, N);
     CHECK_CUDA(cudaDeviceSynchronize());
-
     CHECK_CUDA(cudaEventRecord(start));
-    for (int i = 0; i < 100; i++)
-        scale_soa<<<(N+255)/256, 256>>>(d_x, d_y, d_z, d_w, N);
+    for (int i = 0; i < 100; i++) scale_soa<<<(N+255)/256, 256>>>(d_x, d_y, d_z, d_w, N);
     CHECK_CUDA(cudaEventRecord(stop));
     CHECK_CUDA(cudaEventSynchronize(stop));
-
     float ms_soa = 0;
     CHECK_CUDA(cudaEventElapsedTime(&ms_soa, start, stop));
 
-    size_t bytes = (size_t)N * 4 * sizeof(float) * 2; // read + write
-    printf("AoS: %.3f ms  BW: %.1f GB/s\n",
-           ms_aos / 100, bytes / (ms_aos / 100 * 1e-3) / 1e9);
-    printf("SoA: %.3f ms  BW: %.1f GB/s\n",
-           ms_soa / 100, bytes / (ms_soa / 100 * 1e-3) / 1e9);
+    size_t bytes = (size_t)N * 4 * sizeof(float) * 2;
+    printf("AoS: %.3f ms  BW: %.1f GB/s\n", ms_aos/100, bytes/(ms_aos/100*1e-3)/1e9);
+    printf("SoA: %.3f ms  BW: %.1f GB/s\n", ms_soa/100, bytes/(ms_soa/100*1e-3)/1e9);
     printf("Speedup: %.2fx\n", ms_aos / ms_soa);
 
     CHECK_CUDA(cudaFree(d_aos));
     CHECK_CUDA(cudaFree(d_x)); CHECK_CUDA(cudaFree(d_y));
     CHECK_CUDA(cudaFree(d_z)); CHECK_CUDA(cudaFree(d_w));
-    CHECK_CUDA(cudaEventDestroy(start));
-    CHECK_CUDA(cudaEventDestroy(stop));
+    CHECK_CUDA(cudaEventDestroy(start)); CHECK_CUDA(cudaEventDestroy(stop));
     return 0;
 }
 ```
@@ -330,44 +299,31 @@ int main() {
 
 #define TILE 32
 
-// Naive: each thread loads 2*K elements from global memory
 __global__ void matmul_naive(const float* A, const float* B, float* C,
                              int M, int N, int K) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     if (row < M && col < N) {
         float sum = 0.0f;
-        for (int k = 0; k < K; k++)
-            sum += A[row * K + k] * B[k * N + col];
+        for (int k = 0; k < K; k++) sum += A[row * K + k] * B[k * N + col];
         C[row * N + col] = sum;
     }
 }
 
-// Tiled: each element loaded from global memory is reused TILE times
 __global__ void matmul_tiled(const float* __restrict__ A,
                              const float* __restrict__ B,
-                             float* __restrict__ C,
-                             int M, int N, int K) {
-    __shared__ float As[TILE][TILE];
-    __shared__ float Bs[TILE][TILE];
-
+                             float* __restrict__ C, int M, int N, int K) {
+    __shared__ float As[TILE][TILE], Bs[TILE][TILE];
     int row = blockIdx.y * TILE + threadIdx.y;
     int col = blockIdx.x * TILE + threadIdx.x;
     float sum = 0.0f;
-
     for (int t = 0; t < (K + TILE - 1) / TILE; t++) {
-        // Collaborative load into shared memory
         int a_col = t * TILE + threadIdx.x;
         int b_row = t * TILE + threadIdx.y;
-        As[threadIdx.y][threadIdx.x] = (row < M && a_col < K)
-                                        ? A[row * K + a_col] : 0.0f;
-        Bs[threadIdx.y][threadIdx.x] = (b_row < K && col < N)
-                                        ? B[b_row * N + col] : 0.0f;
+        As[threadIdx.y][threadIdx.x] = (row < M && a_col < K) ? A[row*K+a_col] : 0.0f;
+        Bs[threadIdx.y][threadIdx.x] = (b_row < K && col < N) ? B[b_row*N+col] : 0.0f;
         __syncthreads();
-
-        // Compute partial dot product from shared memory
-        for (int k = 0; k < TILE; k++)
-            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        for (int k = 0; k < TILE; k++) sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
         __syncthreads();
     }
     if (row < M && col < N) C[row * N + col] = sum;
@@ -375,56 +331,38 @@ __global__ void matmul_tiled(const float* __restrict__ A,
 
 int main() {
     const int M = 1024, N = 1024, K = 1024;
-    size_t sA = M * K * sizeof(float);
-    size_t sB = K * N * sizeof(float);
-    size_t sC = M * N * sizeof(float);
-
-    float *hA = (float*)malloc(sA);
-    float *hB = (float*)malloc(sB);
-    for (int i = 0; i < M * K; i++) hA[i] = 0.01f * (i % 100);
-    for (int i = 0; i < K * N; i++) hB[i] = 0.01f * (i % 100);
+    size_t sA = M*K*sizeof(float), sB = K*N*sizeof(float), sC = M*N*sizeof(float);
+    float *hA = (float*)malloc(sA), *hB = (float*)malloc(sB);
+    for (int i = 0; i < M*K; i++) hA[i] = 0.01f * (i % 100);
+    for (int i = 0; i < K*N; i++) hB[i] = 0.01f * (i % 100);
 
     float *dA, *dB, *dC;
-    CHECK_CUDA(cudaMalloc(&dA, sA));
-    CHECK_CUDA(cudaMalloc(&dB, sB));
+    CHECK_CUDA(cudaMalloc(&dA, sA)); CHECK_CUDA(cudaMalloc(&dB, sB));
     CHECK_CUDA(cudaMalloc(&dC, sC));
     CHECK_CUDA(cudaMemcpy(dA, hA, sA, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(dB, hB, sB, cudaMemcpyHostToDevice));
 
-    dim3 block(TILE, TILE);
-    dim3 grid((N + TILE - 1) / TILE, (M + TILE - 1) / TILE);
-
+    dim3 block(TILE, TILE), grid((N+TILE-1)/TILE, (M+TILE-1)/TILE);
     cudaEvent_t start, stop;
-    CHECK_CUDA(cudaEventCreate(&start));
-    CHECK_CUDA(cudaEventCreate(&stop));
+    CHECK_CUDA(cudaEventCreate(&start)); CHECK_CUDA(cudaEventCreate(&stop));
 
-    // Benchmark naive
     matmul_naive<<<grid, block>>>(dA, dB, dC, M, N, K);
     CHECK_CUDA(cudaDeviceSynchronize());
     CHECK_CUDA(cudaEventRecord(start));
-    for (int i = 0; i < 20; i++)
-        matmul_naive<<<grid, block>>>(dA, dB, dC, M, N, K);
-    CHECK_CUDA(cudaEventRecord(stop));
-    CHECK_CUDA(cudaEventSynchronize(stop));
-    float ms_naive = 0;
-    CHECK_CUDA(cudaEventElapsedTime(&ms_naive, start, stop));
+    for (int i = 0; i < 20; i++) matmul_naive<<<grid, block>>>(dA, dB, dC, M, N, K);
+    CHECK_CUDA(cudaEventRecord(stop)); CHECK_CUDA(cudaEventSynchronize(stop));
+    float ms_naive = 0; CHECK_CUDA(cudaEventElapsedTime(&ms_naive, start, stop));
 
-    // Benchmark tiled
     matmul_tiled<<<grid, block>>>(dA, dB, dC, M, N, K);
     CHECK_CUDA(cudaDeviceSynchronize());
     CHECK_CUDA(cudaEventRecord(start));
-    for (int i = 0; i < 20; i++)
-        matmul_tiled<<<grid, block>>>(dA, dB, dC, M, N, K);
-    CHECK_CUDA(cudaEventRecord(stop));
-    CHECK_CUDA(cudaEventSynchronize(stop));
-    float ms_tiled = 0;
-    CHECK_CUDA(cudaEventElapsedTime(&ms_tiled, start, stop));
+    for (int i = 0; i < 20; i++) matmul_tiled<<<grid, block>>>(dA, dB, dC, M, N, K);
+    CHECK_CUDA(cudaEventRecord(stop)); CHECK_CUDA(cudaEventSynchronize(stop));
+    float ms_tiled = 0; CHECK_CUDA(cudaEventElapsedTime(&ms_tiled, start, stop));
 
     double flops = 2.0 * M * N * K;
-    printf("Naive: %.3f ms  %.1f GFLOPS\n",
-           ms_naive / 20, flops / (ms_naive / 20 * 1e-3) / 1e9);
-    printf("Tiled: %.3f ms  %.1f GFLOPS\n",
-           ms_tiled / 20, flops / (ms_tiled / 20 * 1e-3) / 1e9);
+    printf("Naive: %.3f ms  %.1f GFLOPS\n", ms_naive/20, flops/(ms_naive/20*1e-3)/1e9);
+    printf("Tiled: %.3f ms  %.1f GFLOPS\n", ms_tiled/20, flops/(ms_tiled/20*1e-3)/1e9);
     printf("Speedup: %.2fx\n", ms_naive / ms_tiled);
 
     free(hA); free(hB);
@@ -450,28 +388,25 @@ int main() {
         }                                                             \
     } while (0)
 
-// High register usage: compiler may use 64+ registers, limiting occupancy
 __global__ void heavy_register_kernel(const float* in, float* out, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= N) return;
-    // Many live variables force high register usage
-    float a = in[i], b = a * 1.1f, c = b + 2.2f, d = c * 3.3f;
-    float e = d - a, f = e * b, g = f + c, h = g * d;
-    float j = h - e, k = j * f, l = k + g, m = l * h;
-    float n = m - j, o = n * k, p = o + l;
-    out[i] = a + b + c + d + e + f + g + h + j + k + l + m + n + o + p;
+    float a = in[i], b = a*1.1f, c = b+2.2f, d = c*3.3f;
+    float e = d-a, f = e*b, g = f+c, h = g*d;
+    float j = h-e, k = j*f, l = k+g, m = l*h;
+    float n = m-j, o = n*k, p = o+l;
+    out[i] = a+b+c+d+e+f+g+h+j+k+l+m+n+o+p;
 }
 
-// Constrained: compiler targets <= 32 registers for higher occupancy
 __global__ void __launch_bounds__(256, 4)
 bounded_kernel(const float* in, float* out, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= N) return;
-    float a = in[i], b = a * 1.1f, c = b + 2.2f, d = c * 3.3f;
-    float e = d - a, f = e * b, g = f + c, h = g * d;
-    float j = h - e, k = j * f, l = k + g, m = l * h;
-    float n = m - j, o = n * k, p = o + l;
-    out[i] = a + b + c + d + e + f + g + h + j + k + l + m + n + o + p;
+    float a = in[i], b = a*1.1f, c = b+2.2f, d = c*3.3f;
+    float e = d-a, f = e*b, g = f+c, h = g*d;
+    float j = h-e, k = j*f, l = k+g, m = l*h;
+    float n = m-j, o = n*k, p = o+l;
+    out[i] = a+b+c+d+e+f+g+h+j+k+l+m+n+o+p;
 }
 
 int main() {
@@ -483,43 +418,31 @@ int main() {
     CHECK_CUDA(cudaMemset(d_in, 1, bytes));
 
     cudaEvent_t start, stop;
-    CHECK_CUDA(cudaEventCreate(&start));
-    CHECK_CUDA(cudaEventCreate(&stop));
+    CHECK_CUDA(cudaEventCreate(&start)); CHECK_CUDA(cudaEventCreate(&stop));
 
-    // Query register usage via occupancy API
     cudaFuncAttributes attr1, attr2;
     CHECK_CUDA(cudaFuncGetAttributes(&attr1, heavy_register_kernel));
     CHECK_CUDA(cudaFuncGetAttributes(&attr2, bounded_kernel));
-    printf("Unbounded kernel: %d registers/thread\n", attr1.numRegs);
-    printf("Bounded kernel:   %d registers/thread\n", attr2.numRegs);
+    printf("Unbounded: %d regs/thread | Bounded: %d regs/thread\n",
+           attr1.numRegs, attr2.numRegs);
 
-    int blockSize = 256;
-    int gridSize = (N + blockSize - 1) / blockSize;
+    int bs = 256, gs = (N + bs - 1) / bs;
 
-    // Benchmark unbounded
-    heavy_register_kernel<<<gridSize, blockSize>>>(d_in, d_out, N);
+    heavy_register_kernel<<<gs, bs>>>(d_in, d_out, N);
     CHECK_CUDA(cudaDeviceSynchronize());
     CHECK_CUDA(cudaEventRecord(start));
-    for (int i = 0; i < 100; i++)
-        heavy_register_kernel<<<gridSize, blockSize>>>(d_in, d_out, N);
-    CHECK_CUDA(cudaEventRecord(stop));
-    CHECK_CUDA(cudaEventSynchronize(stop));
-    float ms1 = 0;
-    CHECK_CUDA(cudaEventElapsedTime(&ms1, start, stop));
+    for (int i = 0; i < 100; i++) heavy_register_kernel<<<gs, bs>>>(d_in, d_out, N);
+    CHECK_CUDA(cudaEventRecord(stop)); CHECK_CUDA(cudaEventSynchronize(stop));
+    float ms1 = 0; CHECK_CUDA(cudaEventElapsedTime(&ms1, start, stop));
 
-    // Benchmark bounded
-    bounded_kernel<<<gridSize, blockSize>>>(d_in, d_out, N);
+    bounded_kernel<<<gs, bs>>>(d_in, d_out, N);
     CHECK_CUDA(cudaDeviceSynchronize());
     CHECK_CUDA(cudaEventRecord(start));
-    for (int i = 0; i < 100; i++)
-        bounded_kernel<<<gridSize, blockSize>>>(d_in, d_out, N);
-    CHECK_CUDA(cudaEventRecord(stop));
-    CHECK_CUDA(cudaEventSynchronize(stop));
-    float ms2 = 0;
-    CHECK_CUDA(cudaEventElapsedTime(&ms2, start, stop));
+    for (int i = 0; i < 100; i++) bounded_kernel<<<gs, bs>>>(d_in, d_out, N);
+    CHECK_CUDA(cudaEventRecord(stop)); CHECK_CUDA(cudaEventSynchronize(stop));
+    float ms2 = 0; CHECK_CUDA(cudaEventElapsedTime(&ms2, start, stop));
 
-    printf("Unbounded: %.3f ms\n", ms1 / 100);
-    printf("Bounded:   %.3f ms\n", ms2 / 100);
+    printf("Unbounded: %.3f ms | Bounded: %.3f ms\n", ms1/100, ms2/100);
 
     CHECK_CUDA(cudaFree(d_in)); CHECK_CUDA(cudaFree(d_out));
     CHECK_CUDA(cudaEventDestroy(start)); CHECK_CUDA(cudaEventDestroy(stop));
@@ -534,12 +457,10 @@ int main() {
 CUDA lets you control the L1/shared memory split and L2 cache residency:
 
 ```cpp
-// Prefer larger L1 cache for this kernel (data-heavy, little shared mem)
+// Prefer larger L1 cache (data-heavy, little shared mem)
 cudaFuncSetCacheConfig(my_kernel, cudaFuncCachePreferL1);
-
 // Prefer larger shared memory (tiled algorithms)
 cudaFuncSetCacheConfig(matmul_tiled, cudaFuncCachePreferShared);
-
 // Equal split
 cudaFuncSetCacheConfig(my_kernel, cudaFuncCachePreferEqual);
 ```
@@ -688,31 +609,9 @@ __global__ void transform_soa(float* __restrict__ x,
 
 Each array is accessed with stride 1 — fully coalesced.
 
-### Solution 3 (Key Idea)
+### Solution 3 (Key Idea — Double-Buffered Tiling)
 
-```cuda
-__global__ void matmul_double_buf(const float* A, const float* B,
-                                   float* C, int M, int N, int K) {
-    __shared__ float As[2][TILE][TILE];
-    __shared__ float Bs[2][TILE][TILE];
-    int buf = 0;
-    // Prefetch tile 0 into As[0], Bs[0]
-    // ...load tile 0...
-    __syncthreads();
-    for (int t = 0; t < (K/TILE) - 1; t++) {
-        // Prefetch tile t+1 into As[1-buf], Bs[1-buf]
-        // ...load tile t+1...
-        // Compute on As[buf], Bs[buf]
-        // ...dot product...
-        buf = 1 - buf;
-        __syncthreads();
-    }
-    // Compute last tile
-    // ...final dot product, write C...
-}
-```
-
-The alternating `buf` index ensures loads and computes overlap across iterations.
+Use two shared memory buffers `As[2][TILE][TILE]` and alternate with `buf = 1 - buf`. While computing the dot product on `As[buf]`/`Bs[buf]`, prefetch the next tile into `As[1-buf]`/`Bs[1-buf]`. This overlaps global memory latency with compute, yielding 10–20% speedup on large matrices.
 
 ---
 
