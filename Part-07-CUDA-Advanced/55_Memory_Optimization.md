@@ -57,19 +57,9 @@ A stride-32 access pattern delivers **3% of peak bandwidth** — a 32× slowdown
 
 ## 3. Coalesced vs Strided Access — SoA vs AoS
 
-### Array-of-Structs (AoS) — Bad for GPU
+**AoS (Bad for GPU):** `Memory: [x0 y0 z0] [x1 y1 z1] ...` → Thread0→x0, Thread1→x1 = stride 3 → 3 transactions
 
-```
-Memory: [x0 y0 z0] [x1 y1 z1] [x2 y2 z2] ...
-Thread0 reads x0, Thread1 reads x1 → stride 3 → 3 transactions
-```
-
-### Struct-of-Arrays (SoA) — Good for GPU
-
-```
-Memory: [x0 x1 x2 ...] [y0 y1 y2 ...] [z0 z1 z2 ...]
-Thread0 reads x0, Thread1 reads x1 → stride 1 → 1 transaction
-```
+**SoA (Good for GPU):** `Memory: [x0 x1 x2 ...] [y0 y1 y2 ...]` → Thread0→x0, Thread1→x1 = stride 1 → 1 transaction
 
 ---
 
@@ -490,7 +480,6 @@ cudaStreamSetAttribute(stream, cudaStreamAttributeAccessPolicyWindow, &attr);
 Texture memory provides hardware-accelerated interpolation and caching optimized for 2D spatial locality — ideal for image convolutions and lookup tables.
 
 ```cpp
-// Create texture object (modern API)
 cudaResourceDesc resDesc = {};
 resDesc.resType = cudaResourceTypeLinear;
 resDesc.res.linear.devPtr = d_data;
@@ -503,12 +492,11 @@ texDesc.addressMode[0] = cudaAddressModeClamp;
 
 cudaTextureObject_t texObj;
 cudaCreateTextureObject(&texObj, &resDesc, &texDesc, nullptr);
-
 // In kernel: float val = tex1Dfetch<float>(texObj, idx);
 cudaDestroyTextureObject(texObj);
 ```
 
-**When to use textures:** Read-only data with spatial locality (neighbor accesses), irregular access patterns that benefit from the texture cache, or when you need free hardware interpolation.
+**When to use:** Read-only data with spatial locality, irregular access patterns benefiting from the texture cache, or when hardware interpolation is needed.
 
 ---
 
@@ -518,18 +506,8 @@ cudaDestroyTextureObject(texObj);
 
 ```
 Theoretical BW = memory_clock_GHz × bus_width_bytes × 2 (DDR)
-
-A100: 1.215 GHz × 5120 bits / 8 × 2 = 2,039 GB/s
-V100: 0.877 GHz × 4096 bits / 8 × 2 = 898 GB/s
-```
-
-### Measuring Achieved Bandwidth
-
-```
+A100: 1.215 GHz × 5120b/8 × 2 = 2,039 GB/s | V100: 0.877 GHz × 4096b/8 × 2 = 898 GB/s
 Achieved BW = (bytes_read + bytes_written) / kernel_time
-
-For vector add: BW = (3 × N × 4 bytes) / time
-  - 2 reads (A, B) + 1 write (C) per element
 ```
 
 Use `ncu` (Nsight Compute) to profile:
@@ -630,34 +608,19 @@ Use two shared memory buffers `As[2][TILE][TILE]` and alternate with `buf = 1 - 
 - D) 32
 
 **Q3.** Which data layout is preferred for GPU kernels?
-- A) Array-of-Structs (AoS)
-- B) Struct-of-Arrays (SoA) ✅
-- C) Linked lists
-- D) Hash maps
+- A) Array-of-Structs (AoS) · B) Struct-of-Arrays (SoA) ✅ · C) Linked lists · D) Hash maps
 
-**Q4.** In tiled matrix multiply with TILE=32, how many times is each global memory element reused from shared memory?
-- A) 1
-- B) 16
-- C) 32 ✅
-- D) 1024
+**Q4.** In tiled matrix multiply with TILE=32, how many times is each global element reused from shared memory?
+- A) 1 · B) 16 · C) 32 ✅ · D) 1024
 
 **Q5.** What does `__launch_bounds__(256, 4)` specify?
-- A) 256 threads max, 4 registers per thread
-- B) 256 threads per block max, minimum 4 blocks per SM ✅
-- C) 256 blocks, 4 threads each
-- D) 256 warps, 4 SMs
+- A) 256 threads max, 4 regs/thread · B) 256 threads/block max, min 4 blocks/SM ✅ · C) 256 blocks, 4 threads · D) 256 warps, 4 SMs
 
 **Q6.** Which memory type provides hardware-accelerated interpolation?
-- A) Shared memory
-- B) Constant memory
-- C) Texture memory ✅
-- D) Register memory
+- A) Shared · B) Constant · C) Texture ✅ · D) Register
 
-**Q7.** An A100 has 2,039 GB/s peak bandwidth. A kernel achieves 200 GB/s on a vector-add workload. The kernel is likely:
-- A) Compute-bound
-- B) Memory-bound with poor coalescing ✅
-- C) At peak performance
-- D) Limited by PCIe bandwidth
+**Q7.** A100 has 2,039 GB/s peak. A kernel achieves 200 GB/s on vector-add. The kernel is likely:
+- A) Compute-bound · B) Memory-bound with poor coalescing ✅ · C) At peak · D) PCIe limited
 
 ---
 
@@ -676,7 +639,7 @@ Use two shared memory buffers `As[2][TILE][TILE]` and alternate with `buf = 1 - 
 
 ## 13. Chapter Summary
 
-Memory optimization is the single highest-impact activity in CUDA performance tuning. Most GPU kernels are memory-bound, meaning compute units sit idle waiting for data. This chapter covered the full spectrum of memory optimization: ensuring coalesced global memory access patterns (stride-1, 128-byte aligned), restructuring data from AoS to SoA layouts for GPU-friendly access, exploiting shared memory to tile and reuse data (reducing global traffic by 32× in matrix multiply), tuning the L1/L2 cache hierarchy for specific workloads, managing register pressure via `__launch_bounds__` to balance per-thread performance against occupancy, and leveraging texture memory for spatially-local read-only data. The key insight is that a 32× bandwidth improvement from coalescing or tiling often dwarfs any algorithmic micro-optimization. Profile with Nsight Compute, measure achieved bandwidth against theoretical peaks, and iterate.
+Memory optimization is the single highest-impact activity in CUDA performance tuning. Most GPU kernels are memory-bound — compute units sit idle waiting for data. This chapter covered coalesced global memory access (stride-1, 128-byte aligned), SoA data layouts, shared memory tiling (reducing global traffic by 32× in matrix multiply), L1/L2 cache tuning, register pressure management via `__launch_bounds__`, and texture memory for spatially-local reads. A 32× bandwidth improvement from coalescing or tiling dwarfs algorithmic micro-optimizations. Profile with Nsight Compute, measure achieved vs theoretical bandwidth, and iterate.
 
 ---
 
@@ -684,37 +647,27 @@ Memory optimization is the single highest-impact activity in CUDA performance tu
 
 ### Training: Attention Mechanism Memory
 
-In Transformer attention, the Q×K^T matrix multiply is memory-bound for long sequences. FlashAttention achieves 2–4× speedup by **tiling the attention computation into SRAM** (shared memory), never materializing the full N×N attention matrix in HBM. This is exactly the shared-memory tiling technique from Section 5.3, applied at scale.
+FlashAttention achieves 2–4× speedup by **tiling Q, K, V into SRAM** (shared memory), never materializing the full N×N attention matrix in HBM. This is the shared-memory tiling technique from Section 5.3, applied at scale.
 
 ### Inference: KV-Cache Memory Layout
 
-LLM inference stores key-value caches for each layer. Naive implementations use AoS layout `[head][seq][dim]`, causing strided access when different requests in a batch read different sequence positions. **PagedAttention** (vLLM) restructures this into paged SoA blocks, improving memory coalescing and enabling 2–4× higher serving throughput.
+LLM inference KV-caches use naive AoS layout `[head][seq][dim]`, causing strided access across batch requests. **PagedAttention** (vLLM) restructures into paged SoA blocks, improving coalescing and enabling 2–4× higher serving throughput.
 
-### Embedding Tables
+### Embedding Tables & Gradient Accumulation
 
-Recommendation models (DLRM) access massive embedding tables with irregular, sparse patterns. Techniques include: sorting access indices for better coalescing, using texture memory for cached lookups, and L2 pinning for hot embeddings that represent popular items.
-
-### Gradient Accumulation
-
-During backpropagation, gradients are accumulated across micro-batches. Using `atomicAdd` with coalesced access patterns (gradients stored in SoA format) can improve throughput by 3–5× compared to scattered atomic operations.
+Recommendation models (DLRM) sort sparse embedding access indices for coalescing, use texture memory for cached lookups, and pin hot embeddings in L2. During backpropagation, coalesced `atomicAdd` with SoA gradient storage yields 3–5× throughput vs scattered atomics.
 
 ---
 
 ## 15. Common Mistakes
 
-1. **Column-major access in row-major arrays.** Indexing as `data[col * width + row]` when threads vary in `col` creates stride-`width` access. Always ensure the fastest-varying thread index maps to the innermost array dimension.
-
-2. **Ignoring the 128-byte alignment.** Allocating with `malloc` and pointer arithmetic can produce unaligned base addresses. Use `cudaMalloc` (always 256-byte aligned) or `cudaMallocPitch` for 2D arrays.
-
-3. **Shared memory bank conflicts mistaken for coalescing issues.** Bank conflicts (32 banks, 4-byte stride) affect shared memory, not global memory. These are separate problems with different solutions.
-
-4. **Over-tiling.** Using tiles larger than needed wastes shared memory and reduces occupancy. A 32×32 tile uses 4 KB; a 64×64 tile uses 16 KB. Profile to find the sweet spot.
-
-5. **Forgetting `__syncthreads()` in tiled kernels.** Missing barriers between the load phase and compute phase cause race conditions — threads may read stale shared memory values.
-
-6. **Assuming more registers = faster.** High register usage reduces occupancy, which can reduce the GPU's ability to hide memory latency. Sometimes spilling a few registers to local memory (L1-cached) is a net win.
-
-7. **Not profiling.** Guessing at memory bottlenecks is unreliable. Nsight Compute shows exact transaction counts, cache hit rates, and achieved bandwidth per kernel.
+1. **Column-major access in row-major arrays.** Indexing as `data[col * width + row]` when threads vary in `col` creates stride-`width` access. Ensure the fastest-varying thread index maps to the innermost dimension.
+2. **Ignoring 128-byte alignment.** Use `cudaMalloc` (256-byte aligned) or `cudaMallocPitch` for 2D arrays — never raw pointer arithmetic.
+3. **Confusing bank conflicts with coalescing.** Bank conflicts affect shared memory (32 banks); coalescing affects global memory. Different problems, different solutions.
+4. **Over-tiling.** A 32×32 tile uses 4 KB; 64×64 uses 16 KB. Larger tiles waste shared memory and reduce occupancy.
+5. **Forgetting `__syncthreads()`.** Missing barriers between load and compute phases cause race conditions on shared memory.
+6. **Assuming more registers = faster.** High register count reduces occupancy. Sometimes spilling to L1-cached local memory is a net win.
+7. **Not profiling.** Nsight Compute shows exact transaction counts, cache hit rates, and achieved bandwidth. Never guess.
 
 ---
 
@@ -722,23 +675,23 @@ During backpropagation, gradients are accumulated across micro-batches. Using `a
 
 ### Q1: Explain coalesced memory access and why it matters.
 
-**Answer:** Coalesced access means threads in a warp access contiguous, aligned memory addresses so the hardware can combine them into minimal 128-byte transactions. It matters because GPU memory controllers serve data in fixed-size cache lines. When 32 threads each read a 4-byte float at consecutive addresses, one 128-byte transaction serves the entire warp. With stride-32 access, 32 separate transactions are needed — transferring 4,096 bytes to use only 128 bytes (3% efficiency). On an A100 with 2 TB/s peak bandwidth, poor coalescing can reduce effective throughput to ~64 GB/s.
+**Answer:** Coalesced access means threads in a warp access contiguous, aligned addresses so hardware combines them into minimal 128-byte transactions. When 32 threads read consecutive 4-byte floats, one transaction suffices. With stride-32, 32 separate transactions transfer 4,096 bytes for 128 useful bytes (3% efficiency). On an A100 with 2 TB/s peak, poor coalescing drops effective throughput to ~64 GB/s.
 
-### Q2: When would you choose shared memory tiling over relying on L1/L2 caches?
+### Q2: When would you choose shared memory tiling over L1/L2 caches?
 
-**Answer:** Shared memory tiling is preferred when you can **predict and control the reuse pattern** at compile time. Matrix multiply is the canonical example: each element of A and B is reused exactly TILE times, so explicit tiling into shared memory guarantees the reuse. L1/L2 caches work well for unpredictable access patterns or when the working set fits naturally, but they are subject to eviction policies you can't control. For algorithms with known, structured reuse (convolutions, stencils, reductions), explicit shared memory management consistently outperforms cache-only approaches. Additionally, shared memory provides programmer-controlled bank-conflict-free access patterns that hardware caches cannot guarantee.
+**Answer:** Use tiling when the reuse pattern is **predictable at compile time** — matrix multiply, convolutions, stencils. Each element reuses exactly TILE times, so explicit shared memory guarantees the reuse. L1/L2 caches are better for unpredictable patterns or when data naturally fits, but eviction policies can't be controlled. Shared memory also enables bank-conflict-free access patterns.
 
 ### Q3: What is `__launch_bounds__` and when should you use it?
 
-**Answer:** `__launch_bounds__(maxThreadsPerBlock, minBlocksPerMultiprocessor)` is a function attribute that tells the CUDA compiler to optimize register allocation for the specified occupancy target. The compiler will limit register usage so that at least `minBlocksPerMultiprocessor` blocks can run concurrently on each SM. Use it when a kernel uses too many registers, limiting occupancy and reducing the GPU's ability to hide latency. For example, `__launch_bounds__(256, 4)` on an SM with 65,536 registers forces the compiler to use ≤ 64 registers per thread (65536 / 256 / 4 = 64). The tradeoff: fewer registers may cause spilling to local memory, so always benchmark both versions.
+**Answer:** `__launch_bounds__(maxThreads, minBlocks)` tells the compiler to limit register usage so at least `minBlocks` can run per SM. Example: `__launch_bounds__(256, 4)` with 65,536 registers/SM → max 64 regs/thread. Use when high register count limits occupancy. Tradeoff: fewer registers may cause spilling, so always benchmark.
 
-### Q4: Compare AoS vs SoA for GPU programming with a concrete performance example.
+### Q4: Compare AoS vs SoA for GPU programming.
 
-**Answer:** AoS (Array-of-Structs) stores each object's fields contiguously: `[x0,y0,z0, x1,y1,z1, ...]`. When a warp of 32 threads each reads the `x` field, they access addresses 0, 12, 24, 36... (stride 3 for a 3-float struct). This requires 3 transactions instead of 1 — a 3× bandwidth waste. SoA stores fields separately: `[x0,x1,...,x31,...], [y0,y1,...]`. Now reading all `x` values is stride-1, perfectly coalesced. In practice, converting particle simulations from AoS to SoA yields 2–4× speedup on memory-bound kernels. The only downside is slightly more complex host-side code for data marshaling.
+**Answer:** AoS `[x0,y0,z0, x1,y1,z1,...]` forces stride-3 access when threads read the `x` field — 3 transactions instead of 1. SoA `[x0,x1,...], [y0,y1,...]` gives stride-1, perfectly coalesced access. Converting particle simulations from AoS to SoA yields 2–4× speedup on memory-bound kernels.
 
-### Q5: How does FlashAttention use memory optimization principles to speed up Transformer training?
+### Q5: How does FlashAttention use memory optimization?
 
-**Answer:** Standard attention computes `softmax(Q×K^T)×V`, materializing the N×N attention matrix in HBM — O(N²) memory and bandwidth. FlashAttention applies **shared memory tiling**: it splits Q, K, V into tiles that fit in SRAM (shared memory), computes partial attention within tiles, and uses online softmax to fuse the normalization. The full N×N matrix never exists in HBM. This reduces HBM reads/writes from O(N²) to O(N² / SRAM_SIZE × N), achieving 2–4× wall-clock speedup and enabling longer sequences. It's the same principle as tiled matrix multiply (Section 5.3) extended with numerical stability tricks for softmax.
+**Answer:** Standard attention materializes the N×N attention matrix in HBM — O(N²) bandwidth. FlashAttention tiles Q, K, V into shared memory, computes partial attention with online softmax, and never writes the full matrix to HBM. This reduces HBM traffic dramatically, achieving 2–4× speedup — the same tiling principle as matrix multiply extended with numerical stability tricks.
 
 ---
 
