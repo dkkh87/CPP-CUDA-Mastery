@@ -13,7 +13,6 @@ tags:
   - constexpr
   - stacktrace
 ```
-
 > **Prerequisites:** Solid grasp of C++20 (concepts, ranges, coroutines, modules)
 > **Estimated Time:** 4–6 hours
 
@@ -22,7 +21,6 @@ tags:
 ## 1. Theory
 
 C++23 is not a "revolution release" — it is the **refinement cycle** that follows C++20's massive feature set. Where C++20 introduced concepts, coroutines, ranges, and modules, C++23 polishes those foundations and fills critical gaps. The result is a language that is more ergonomic, safer, and more expressive without adding conceptual weight.
-
 The philosophy behind C++23 can be summarized as **"make the right thing easy."** Error handling gets `std::expected` so you stop abusing exceptions for control flow. Multi-dimensional data gets `std::mdspan` so you stop raw-pointer arithmetic in scientific and GPU code. Output gets `std::print` so you stop choosing between type-unsafe `printf` and verbose `iostream`. Associative lookups get `flat_map`/`flat_set` so you stop paying cache-miss penalties for small collections.
 
 These are not academic additions — every feature here solves a pain point that C++ programmers have endured for decades.
@@ -358,7 +356,6 @@ graph TD
     style LANG fill:#c41e3a,color:#fff
     style LIB fill:#2e5090,color:#fff
 ```
-
 ### std::expected vs std::optional vs Exceptions
 
 ```mermaid
@@ -391,10 +388,10 @@ Write a function `safe_divide(double a, double b) -> std::expected<double, std::
 Create a `std::generator<int>` that yields all multiples of 3 *or* 5 below a given limit. Pipe it through `std::views::take(20)` and print the results.
 
 ### 🟡 Medium — E4: mdspan Matrix Transpose
-Write a function that takes a `std::mdspan<int, std::dextents<size_t, 2>>` and returns a transposed copy stored in a `std::vector<int>`.
+Write a function that takes a `std::mdspan<int, std::dextents<size_t, 2>>` and returns a transposed copy in a `std::vector<int>`.
 
 ### 🔴 Hard — E5: Deducing this Builder
-Create a `QueryBuilder` class that uses deducing `this` for method chaining. It should support `.select(columns)`, `.from(table)`, `.where(condition)`, and `.build()` returning the SQL string. Ensure it works with both lvalue and rvalue builders.
+Create a `QueryBuilder` class using deducing `this` for method chaining with `.select()`, `.from()`, `.where()`, and `.build()`. Ensure it works with both lvalue and rvalue builders.
 
 ---
 
@@ -418,15 +415,13 @@ int main() {
 #include <print>
 
 std::expected<double, std::string> safe_divide(double a, double b) {
-    if (b == 0.0)
-        return std::unexpected("division by zero");
+    if (b == 0.0) return std::unexpected("division by zero");
     return a / b;
 }
 
 int main() {
     auto r = safe_divide(10.0, 3.0);
     if (r) std::println("Result: {:.4f}", *r);
-
     auto e = safe_divide(1.0, 0.0);
     if (!e) std::println("Error: {}", e.error());
 }
@@ -568,7 +563,6 @@ C++23 completes the promise of C++20 by delivering ergonomic and library improve
 ---
 
 ## 10. Real-World Insight
-
 **GPU Computing with mdspan:** In CUDA workflows, flat device memory from `cudaMalloc` requires manual index arithmetic (`row * width + col`). `std::mdspan` eliminates this on the host side — you reason about dimensions through the type system, then pass the raw pointer and extents to your kernel. Layout policies (`layout_right` for row-major, `layout_left` for column-major cuBLAS) catch transposition bugs at compile time rather than producing silent wrong results.
 
 **Error Handling in Production:** Major codebases (Chromium, LLVM, game engines) have long maintained custom `Result<T, E>` types. `std::expected` standardizes this, enabling monadic chaining (`and_then`, `transform`, `or_else`) for Railway-Oriented Programming — no nested if-else pyramids.
@@ -578,17 +572,11 @@ C++23 completes the promise of C++20 by delivering ergonomic and library improve
 ## 11. Common Mistakes
 
 1. **Confusing `std::expected` with `std::optional`.** `optional<T>` means "maybe a value" — it cannot carry error information. Use `expected<T, E>` when callers need to know *why* something failed.
-
-2. **Assuming `std::flat_map` is always faster than `std::map`.** Flat maps excel for small-to-medium collections and read-heavy workloads. For large collections with frequent insertions, `std::map`'s O(log n) insertion beats flat_map's O(n) element shifting.
-
+2. **Assuming `std::flat_map` is always faster than `std::map`.** Flat maps excel for small-to-medium read-heavy workloads. For large collections with frequent insertions, `std::map`'s O(log n) beats flat_map's O(n) shifting.
 3. **Forgetting that `std::mdspan` is non-owning.** The underlying data must outlive the mdspan. Don't create an mdspan over a temporary vector.
-
 4. **Using `std::print` without `<print>` header.** It is *not* in `<iostream>` or `<format>`.
-
 5. **Writing deducing `this` without naming the parameter.** The explicit object parameter must be named — you cannot use `this` as both keyword and parameter.
-
 6. **Expecting `std::generator` to be eager.** Generators are lazy — they compute values only when iterated.
-
 7. **Mixing up `layout_left` and `layout_right`.** `layout_right` (row-major) is the default. CUDA/Fortran libraries expect `layout_left` (column-major). Getting this wrong silently transposes data.
 
 ---
@@ -609,4 +597,4 @@ C++23 completes the promise of C++20 by delivering ergonomic and library improve
 
 ### Q4: When should you prefer `std::flat_map` over `std::map`?
 
-**Answer:** Use `flat_map` for small-to-medium collections (hundreds to low thousands) where lookups and iteration dominate insertions. It stores keys and values in sorted contiguous vectors, so iteration has excellent cache locality. `std::map` uses a red-black tree with scattered heap nodes — each access risks a cache miss. For large datasets with frequent mutations, `std::map` wins because `flat_map`'s insertion requires element shifting (O(n)).
+**Answer:** Use `flat_map` for small-to-medium collections where lookups and iteration dominate insertions. It stores keys and values in sorted contiguous vectors, so iteration has excellent cache locality. `std::map` uses a red-black tree with scattered heap nodes — each access risks a cache miss. For large datasets with frequent mutations, `std::map` wins because `flat_map`'s insertion requires element shifting (O(n)).
