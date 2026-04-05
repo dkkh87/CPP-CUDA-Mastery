@@ -41,6 +41,8 @@ flowchart LR
 ## Implementation
 ### Step 1 — The JSON Value Type
 
+The `JsonValue` struct uses `std::variant` to represent every possible JSON type (null, boolean, number, string, array, object) in a single stack-friendly tagged union. This replaces a traditional class hierarchy with virtual methods, and the convenience accessors (`is_null()`, `as_string()`, etc.) provide safe, typed access to the underlying data. Because `JsonArray` contains `JsonValue` recursively, this models the full recursive structure of JSON.
+
 ```cpp
 // json.hpp
 #pragma once
@@ -88,6 +90,8 @@ struct JsonValue {
 };
 ```
 ### Step 2 — Tokens and the Lexer
+
+The lexer (tokenizer) scans the raw JSON string character by character, producing a stream of `Token` objects that carry the token type, source text as a `string_view` (zero-copy), and line/column position for error reporting. It handles structural characters, strings with escape sequences, numbers with optional sign/decimal/exponent, and keywords (`true`, `false`, `null`). This first-pass tokenization simplifies the parser by letting it work with typed tokens instead of raw characters.
 
 ```cpp
 enum class TokenType {
@@ -202,6 +206,8 @@ private:
 };
 ```
 ### Step 3 — The Recursive-Descent Parser
+
+The parser consumes the token stream and builds a `JsonValue` tree by calling one function per grammar rule: `parse_value`, `parse_array`, `parse_object`, etc. Each function matches expected tokens with `expect()` and recurses for nested structures. String unescaping converts `\n`, `\t`, `\"`, and `\uXXXX` Unicode escapes into their actual characters. This recursive-descent approach directly mirrors the JSON grammar, making the code easy to follow and extend.
 
 ```cpp
 class Parser {
@@ -354,6 +360,8 @@ inline JsonValue parse(std::string_view source) {
 ```
 ### Step 4 — Demo and Tests
 
+This file first demonstrates the parser on a realistic multi-key JSON document with nested objects and arrays, then runs a comprehensive test suite covering atoms, numbers, strings with escapes, arrays, objects, whitespace tolerance, and error detection. Each test uses a simple `CHECK` lambda that counts passes and failures, providing a lightweight test framework without external dependencies.
+
 ```cpp
 // main.cpp
 #include "json.hpp"
@@ -447,6 +455,8 @@ int main() {
 }
 ```
 ### Building and Running
+
+Compile with C++17 (required for `std::variant` and `std::string_view`) and run the combined demo and test suite. A zero exit code means all tests passed.
 
 ```bash
 g++ -std=c++17 -O2 -Wall -Wextra -o json_parser main.cpp && ./json_parser

@@ -305,6 +305,8 @@ private:
 
 ### Usage pattern on the hot path
 
+This snippet shows the typical hot-path usage: allocate from the thread-local arena (one pointer bump, zero syscalls), use the memory for the duration of the tick, then reset the entire arena in O(1) — effectively "freeing" all allocations instantly without calling any destructors.
+
 ```cpp
 thread_local hft::Arena arena(1 << 20);   // 1 MiB per thread
 
@@ -1764,6 +1766,8 @@ int main() {
 
 ### Build command
 
+Compile with maximum optimization (`-O3`), native CPU architecture support (`-march=native`), and explicit AVX2 SIMD instructions enabled. The `-lpthread` flag links the threading library needed for the multi-threaded pipeline test.
+
 ```bash
 g++ -std=c++20 -O3 -march=native -mavx2 -lpthread \
     -o hft_engine main.cpp
@@ -1785,6 +1789,8 @@ g++ -std=c++20 -O3 -march=native -mavx2 -lpthread \
 | Sanitizers | Memory safety | Compile with `-fsanitize=address,thread` | Zero findings |
 
 ### Running with sanitizers
+
+These alternative build commands enable AddressSanitizer and ThreadSanitizer to detect memory corruption and data races respectively. They run slower but catch subtle bugs that only manifest under specific timing conditions — essential for verifying lock-free code correctness.
 
 ```bash
 # AddressSanitizer — detects buffer overflows, use-after-free.
@@ -1843,6 +1849,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 ```
 
 ### What to profile with `perf`
+
+These `perf` commands measure hardware-level performance counters (cache misses, branch mispredictions, IPC) and record a call-graph profile that reveals which functions dominate the hot path. The results tell you whether you are CPU-bound, memory-bound, or stalled on branch prediction.
 
 ```bash
 # Record hardware counters.

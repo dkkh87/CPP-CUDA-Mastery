@@ -211,6 +211,8 @@ float cpu_vec_dot(const float *a, const float *b, int n) {
 
 ### Step 4 — Utility Helpers
 
+These host-side helper functions handle data setup and result verification. `fill_random` populates arrays with random floats for testing, and `check_results` compares GPU output against CPU-computed reference values element by element, flagging any mismatches beyond a small tolerance. This pattern — generate, compute on GPU, compare with CPU — is the standard CUDA correctness validation workflow.
+
 ```cuda
 // -----------------------------------------------------------
 // Fill an array with random floats in [0, 1).
@@ -272,6 +274,8 @@ struct GpuTimer {
 ```
 
 ### Step 6 — `main()`: Putting It All Together
+
+The main function ties everything together: it allocates host and device memory, copies input data to the GPU, launches each kernel (add, subtract, scale, dot product) with timing via CUDA events, copies results back, and verifies correctness against CPU reference implementations. The timing comparison between GPU and CPU reveals the speedup — which becomes significant at larger vector sizes where the GPU's parallelism dominates the overhead of memory transfers.
 
 ```cuda
 int main() {
@@ -445,6 +449,8 @@ All operations complete. Device memory freed.
 | **Zero vector** | `b[i] = 0` for add/sub | Output equals `a` (add) or `a` (sub) |
 
 ### Stress Tests
+
+Use NVIDIA's `compute-sanitizer` tool to detect out-of-bounds memory accesses, race conditions, and uninitialized memory reads in your kernels. This is especially important for catching off-by-one errors in thread indexing that may silently corrupt data without crashing.
 
 ```bash
 # Detect out-of-bounds memory access

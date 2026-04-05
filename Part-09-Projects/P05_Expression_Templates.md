@@ -79,6 +79,8 @@ flowchart LR
 
 ### Step 1 — Concepts & CRTP Base (`expr_base.hpp`)
 
+The `VectorExpression` concept defines a compile-time contract: any type that provides `operator[]` and `size()` can participate in expression trees. The `ExprBase` CRTP base class gives every expression node these methods by delegating to the derived type — this is the foundation that makes all expression templates composable without virtual functions.
+
 ```cpp
 #pragma once
 #include <cstddef>
@@ -101,6 +103,8 @@ struct ExprBase {
 ```
 
 ### Step 2 — Concrete Vector with Aligned Storage (`vector.hpp`)
+
+The `Vector` class owns a 32-byte-aligned heap buffer suitable for AVX SIMD loads. Its key innovation is the templated `operator=` that accepts any `VectorExpression`: when you write `result = a + b * c`, this single assignment triggers the entire expression tree evaluation in one fused loop, optionally using AVX-256 instructions to process four doubles per cycle. No temporary vectors are ever allocated.
 
 ```cpp
 #pragma once
@@ -199,6 +203,8 @@ private:
 ```
 
 ### Step 3 — Binary & Unary Expression Templates (`expr_ops.hpp`)
+
+These lightweight proxy types (`BinaryExpr`, `ScalarExpr`, `UnaryExpr`, `FmaExpr`) store only references to their operands — no data is copied or allocated. When you write `a + b * c`, the compiler builds a `BinaryExpr<Vector, MulExpr<Vector, Vector>, AddOp>` at compile time. Each `operator[]` call computes a single element by recursing through the tree, which the compiler fully inlines into one arithmetic expression per element.
 
 ```cpp
 #pragma once
@@ -311,6 +317,8 @@ double dot(const L& l, const R& r) {
 
 ### Step 4 — Matrix Expression Templates (`matrix.hpp`)
 
+This module extends the expression template pattern to 2-D matrices, using a separate `MatExprBase` CRTP base and `MatrixExpression` concept with `(row, col)` indexing. `MatMulExpr` lazily represents a matrix product — the inner dot-product loop is evaluated only when the result is assigned. This demonstrates how the same zero-temporary pattern scales from vectors to higher-dimensional data structures.
+
 ```cpp
 #pragma once
 #include "vector.hpp"
@@ -400,6 +408,8 @@ auto mat_mul(const L& l, const R& r) { return MatMulExpr<L,R>(l,r); }
 ```
 
 ### Step 5 — Tests & Benchmark (`test_expr.cpp`)
+
+This file contains both correctness tests and a performance benchmark. The unit tests verify basic arithmetic, scalar/unary ops, chained expressions, dot product, fused multiply-add, matrix operations, and large-vector accuracy. The benchmark then compares expression-template evaluation (one fused loop) against naïve multi-pass loops, showing the speedup from eliminating temporary allocations and reducing memory traffic.
 
 ```cpp
 #include "vector.hpp"
@@ -509,6 +519,8 @@ int main() {
 ```
 
 ### Build & Run
+
+Compile with C++20 and AVX/FMA intrinsics enabled. The `-mavx` and `-mfma` flags allow the compiler to emit 256-bit SIMD instructions for the expression evaluation loops.
 
 ```bash
 g++ -std=c++20 -O2 -mavx -mfma -Wall -Wextra -o test_expr test_expr.cpp

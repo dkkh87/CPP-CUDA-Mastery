@@ -101,6 +101,8 @@ Client ──TCP──► io_uring CQ ──► EventLoop ──► Acceptor / R
 
 ### Step 0 — Compile-Time Configuration
 
+This header defines all server tunables as `constexpr` constants, so they are baked into the binary at compile time with zero runtime cost. The `static_assert` checks catch invalid configurations (like a non-power-of-two queue depth) before any code runs, demonstrating how modern C++ moves error detection from runtime to compile time.
+
 ```cpp
 // config.hpp
 #pragma once
@@ -130,6 +132,8 @@ static_assert(kUringQueueDepth >= 64 && (kUringQueueDepth & (kUringQueueDepth - 
 ```
 
 ### Step 1 — HTTP Types and Request Parser
+
+This file defines the core HTTP data structures (`HttpRequest`, `Header`, `Method`, `StatusCode`) and an incremental state-machine parser that can process HTTP/1.1 requests arriving in arbitrary-sized chunks. The parser uses a `string_pool_` to keep `string_view` references valid across buffer mutations, and extracts keep-alive semantics from both the `Connection` header and the HTTP version — demonstrating real-world incremental parsing with zero-copy string handling.
 
 ```cpp
 // http_types.hpp
@@ -332,6 +336,8 @@ private:
 
 ### Step 2 — Response Builder
 
+The `ResponseBuilder` uses the builder pattern (fluent method chaining) to construct well-formed HTTP/1.1 responses with proper status lines, timestamps, content-length, and connection headers. It leverages `std::format` for safe, type-checked string formatting — a modern C++20 replacement for `sprintf`.
+
 ```cpp
 // http_response.hpp
 #pragma once
@@ -424,6 +430,8 @@ private:
 
 ### Step 3 — CRTP Handler Framework
 
+This module uses the Curiously Recurring Template Pattern (CRTP) to dispatch HTTP requests to handler implementations without virtual function overhead. A C++20 concept (`RequestHandler`) constrains which types can be registered, catching misuse at compile time. Each concrete handler (`HealthHandler`, `EchoHandler`, `NotFoundHandler`) inherits from `Handler<Derived>`, and the compiler inlines the dispatch — producing the same machine code as a direct function call.
+
 ```cpp
 // handler.hpp
 #pragma once
@@ -510,6 +518,8 @@ public:
 ```
 
 ### Step 4 — Connection Pool and State Machine
+
+The connection pool pre-allocates a fixed array of `Connection` objects at startup, avoiding heap allocation on the hot path. Each connection tracks its lifecycle via a `ConnState` enum (Free → Reading → Parsing → Writing → Closing), supports keep-alive reuse, and can be reaped if idle too long. This demonstrates RAII resource management and fixed-capacity pool patterns common in high-performance servers.
 
 ```cpp
 // connection.hpp
@@ -975,6 +985,8 @@ void submit_recv(Connection& conn) {
 
 ### Step 6 — `main.cpp` Putting It All Together
 
+The entry point wires all components together: it installs signal handlers for graceful shutdown, registers CRTP-based handlers and a lambda handler on specific URL prefixes, and starts the event loop. This shows how the modular design from previous steps composes into a working server with just a few lines of glue code.
+
 ```cpp
 // main.cpp
 #include <cstdlib>
@@ -1026,6 +1038,8 @@ int main(int argc, char* argv[]) {
 
 ### Build System
 
+This Makefile compiles the server with C++20, links against `liburing` for io_uring support, and enables native CPU optimizations with `-march=native`. The header-only design means a single translation unit is sufficient.
+
 ```makefile
 # Makefile
 CXX      := g++-13
@@ -1053,6 +1067,8 @@ clean:
 ## Testing Strategy
 
 ### Unit Tests (with Google Test)
+
+These unit tests verify the request parser in isolation — checking that it correctly extracts methods, URIs, headers, body content, keep-alive semantics, and handles incremental byte feeding. The `ResponseBuilder` test confirms that the formatted output matches the HTTP/1.1 wire format. Running these without a live server makes debugging fast and deterministic.
 
 ```cpp
 // test_parser.cpp
@@ -1132,6 +1148,8 @@ TEST(ResponseBuilder, FormatsCorrectly) {
 
 ### Integration Tests (curl + wrk)
 
+This shell script exercises the live server end-to-end using `curl`, validating HTTP status codes, JSON health responses, echo body reflection, 404 handling, keep-alive connections, and `Connection: close` behavior. It serves as a quick smoke test you can run after every code change.
+
 ```bash
 #!/usr/bin/env bash
 # test_integration.sh — run against a live server instance
@@ -1161,6 +1179,8 @@ echo "All integration tests passed!"
 ```
 
 ### Load Testing with wrk
+
+These `wrk` commands stress-test the server under sustained concurrent load, measuring requests per second and latency percentiles. The first command simulates 512 simultaneous connections across 8 threads for 30 seconds; the second tests the keep-alive pipeline path.
 
 ```bash
 # Sustained load test — 8 threads, 512 connections, 30 seconds
@@ -1193,6 +1213,8 @@ wrk -t4 -c256 -d10s -H "Connection: keep-alive" http://localhost:8080/echo
    buffers registered via `io_uring_register_buffers()`.
 
 ### Profiling Commands
+
+These commands use `strace` and `perf` to compare syscall counts, context switches, and cache behavior between epoll and io_uring implementations. Lower syscall counts and fewer context switches are the primary reasons io_uring outperforms epoll in this workload.
 
 ```bash
 # System call trace — compare counts between epoll/io_uring

@@ -72,6 +72,8 @@ flowchart LR
 
 ### 1 — Header, Constants, and Utilities
 
+This section sets up the includes, defines the bank-conflict padding macro (which inserts one padding slot every 32 elements to avoid shared-memory bank conflicts), and provides a simple CPU exclusive scan for reference testing. The `CUDA_CHECK` macro wraps every CUDA API call to catch errors immediately with file and line information.
+
 ```cuda
 // blelloch_scan.cu
 #include <cuda_runtime.h>
@@ -194,6 +196,8 @@ __global__ void add_block_sums_kernel(int* data, const int* block_sums, int n) {
 
 ### 4 — Recursive Large-Array Scan
 
+This host function handles arrays larger than one block by applying the three-phase pattern: first scan each block locally (collecting each block's total), then recursively scan those block totals, and finally propagate the scanned totals back into each block. The recursion bottoms out when the array fits in a single block, making this work for arbitrarily large inputs.
+
 ```cuda
 void blelloch_scan(int* d_out, const int* d_in, int n) {
     int numBlocks = (n + ELEMENTS_PER_BLOCK - 1) / ELEMENTS_PER_BLOCK;
@@ -275,6 +279,8 @@ int stream_compact(const int* d_input, int* d_output, int n, int threshold) {
 
 ### 6 — CUB Comparison Wrapper
 
+This wrapper calls NVIDIA's CUB library `DeviceScan::ExclusiveSum`, which is the production-grade scan implementation. CUB uses a single-pass decoupled look-back algorithm with warp-level intrinsics, making it significantly faster than our hand-written Blelloch kernel. We use it as a correctness and performance baseline.
+
 ```cuda
 void cub_exclusive_scan(int* d_out, const int* d_in, int n) {
     void*  d_temp     = nullptr;
@@ -315,6 +321,8 @@ __global__ void spmv_csr_kernel(int num_rows,
 ```
 
 ### 8 — Benchmarking and Validation Main
+
+The main function tests both the Blelloch scan and CUB across multiple array sizes (from 512 to 16M elements), verifying each against the CPU reference and measuring average kernel time over 20 runs. It also demonstrates the stream compaction application — filtering elements above a threshold — and validates that every surviving element passes the predicate.
 
 ```cuda
 float benchmark_kernel(void (*fn)(int*, const int*, int),
@@ -439,9 +447,9 @@ nvcc -O3 -std=c++17 -arch=sm_70 blelloch_scan.cu -o blelloch_scan
 | **Random values** | Compare against CPU reference element-by-element |
 | **Stream compaction** | Every output element must satisfy predicate; count must match CPU filter |
 
+Run `compute-sanitizer` to detect out-of-bounds shared and global memory accesses, race conditions, and other memory errors in the scan kernels.
+
 ```bash
-# Quick smoke test with compute-sanitizer
-compute-sanitizer --tool memcheck ./blelloch_scan
 ```
 
 ## Performance Analysis
@@ -462,6 +470,8 @@ compute-sanitizer --tool memcheck ./blelloch_scan
 3. **Decoupled look-back** — single-pass algorithm avoids recursive block-sum scan.
 
 ### Profiling Commands
+
+Use `nsys` for a timeline overview showing kernel durations and memory transfers, and `ncu` for detailed metrics like shared-memory throughput, occupancy, and bank-conflict replays on the scan kernel.
 
 ```bash
 # Kernel timing

@@ -58,6 +58,8 @@ flowchart TD
 
 ### 1 — Common Header and Utilities
 
+This section sets up the project with CUDA includes, defines the histogram parameters (256 bins, 256 threads per block), and provides two host-side helpers: `generate_image` creates pseudo-random byte data simulating a grayscale image, and `cpu_histogram` computes a reference histogram on the CPU for correctness validation. The `CUDA_CHECK` macro catches CUDA errors immediately with file and line information.
+
 ```cuda
 // histogram.cu
 #include <cuda_runtime.h>
@@ -206,6 +208,8 @@ __global__ void histogram_multi_private(const unsigned char *data,
 
 ### 5 — Timing Utility
 
+This lightweight GPU timer wrapper uses CUDA events to measure kernel execution time accurately. Unlike host-side `clock()` or `chrono`, CUDA events measure only the GPU work between `start` and `stop` markers, excluding driver overhead and CPU scheduling jitter.
+
 ```cuda
 typedef struct {
     cudaEvent_t start, stop;
@@ -237,6 +241,8 @@ void timer_destroy(GpuTimer *t) {
 ---
 
 ### 6 — Host Driver: Launch, Verify, Benchmark
+
+The `run_kernel` function provides a reusable test harness that clears the device histogram, runs a warm-up pass (to prime caches and trigger any lazy initialization), then performs a timed kernel launch and verifies the result against the CPU reference. The main function orchestrates this for all three kernel variants and prints a comparison table of timing and correctness results.
 
 ```cuda
 int verify(const unsigned int *ref, const unsigned int *test, int bins) {
@@ -332,6 +338,8 @@ int main(int argc, char **argv) {
 ---
 
 ### 7 — Build & Run
+
+Compile with `nvcc` targeting your GPU's compute capability (e.g., `sm_75` for Turing, `sm_86` for Ampere). You can pass a custom element count as a command-line argument to test different data sizes.
 
 ```bash
 # Compile (adjust -arch for your GPU, e.g. sm_86 for Ampere)

@@ -79,6 +79,8 @@ Grid dimensions: `Gx = ceil(W/16)`, `Gy = ceil(H/16)`.
 
 ### Step 1 — PGM Image I/O and Error Checking
 
+This section provides a self-contained image loading pipeline: reading binary PGM (P5) grayscale files, writing results back to PGM, and generating synthetic gradient test images when no file is provided. The PGM format stores raw pixel bytes with a simple header, so we avoid any external image library dependencies. The `CUDA_CHECK` macro wraps every CUDA call for immediate error reporting.
+
 ```cuda
 // image_filters.cu — complete, self-contained project
 #include <cstdio>
@@ -154,6 +156,8 @@ Image generateTestImage(int width, int height) {
 
 ### Step 2 — Constant Memory for Convolution Kernels
 
+The convolution weights are stored in CUDA `__constant__` memory, which is cached and broadcast to all threads in a warp simultaneously. Since the kernel weights are small (at most 17×17 floats), read-only, and accessed identically by every thread, constant memory is the ideal storage — delivering much higher throughput than loading weights from global memory.
+
 ```cuda
 #define MAX_KERNEL_RADIUS 8
 #define MAX_KERNEL_SIZE   ((2 * MAX_KERNEL_RADIUS + 1) * (2 * MAX_KERNEL_RADIUS + 1))
@@ -169,6 +173,8 @@ void setKernel(const float *h_kernel, int radius) {
 ```
 
 ### Step 3 — Generic 2-D Convolution Kernel
+
+Each GPU thread processes exactly one output pixel by sliding the convolution kernel over the input neighborhood. Boundary pixels use clamped addressing (`min`/`max`) to repeat edge values instead of reading out of bounds. The kernel reads weights from constant memory and accumulates a weighted sum, then clamps the result to [0, 255] before writing the output.
 
 ```cuda
 __global__ void convolve2D(const unsigned char *input,
@@ -202,6 +208,8 @@ __global__ void convolve2D(const unsigned char *input,
 
 ### Step 4 — Sobel Edge Detection (dual-kernel gradient magnitude)
 
+Sobel edge detection uses two separate 3×3 kernels — one for horizontal gradients (X) and one for vertical gradients (Y). Each thread computes both directional derivatives and combines them as `sqrt(gx² + gy²)` to produce the edge magnitude. This demonstrates how a single kernel can apply two different convolution weights in parallel for a more complex image operation.
+
 ```cuda
 __constant__ float d_sobelX[9];
 __constant__ float d_sobelY[9];
@@ -231,6 +239,8 @@ __global__ void sobelEdge(const unsigned char *input,
 ```
 
 ### Step 5 — Filter Builders (host side)
+
+These host-side functions construct the convolution weight arrays for each filter type and upload them to constant memory via `cudaMemcpyToSymbol`. Box blur uses uniform weights (1/n), Gaussian uses distance-weighted values normalized to sum to 1, and sharpen amplifies the center pixel while subtracting neighbors. This separation of kernel construction from kernel execution keeps the GPU code generic.
 
 ```cuda
 enum FilterType { FILTER_BOX, FILTER_GAUSSIAN, FILTER_SHARPEN, FILTER_SOBEL };
@@ -277,6 +287,8 @@ void uploadSobelKernels() {
 
 ### Step 6 — Launch Wrapper with Timing
 
+This wrapper function configures the 2-D grid and block dimensions (16×16 threads per block), selects the appropriate kernel (Sobel or generic convolution), and measures execution time using CUDA events. CUDA events time only the GPU work, giving more accurate results than host-side wall clocks that would include driver overhead.
+
 ```cuda
 float applyFilter(const unsigned char *d_in, unsigned char *d_out,
                   int width, int height, FilterType filter)
@@ -305,6 +317,8 @@ float applyFilter(const unsigned char *d_in, unsigned char *d_out,
 ```
 
 ### Step 7 — Main: Run All Filters
+
+The main function loads or generates an input image, allocates GPU memory, then runs all four filters (box blur, Gaussian blur, sharpen, Sobel edge) in sequence — building the appropriate kernel weights, applying the filter, and saving each result as a separate PGM file. The timing results are printed in a table for easy comparison.
 
 ```cuda
 int main(int argc, char **argv) {

@@ -1253,6 +1253,8 @@ struct FramePipeline {
 
 ## Step 7 — Main Application: Putting It All Together
 
+The main function wires together all previous components into a complete rendering application. It builds a scene with spheres and a Cornell-box-style room, constructs the BVH, initializes the CUDA-OpenGL interop for real-time display, and runs the render loop — accumulating path-traced samples across frames and applying the neural denoiser before display. Each frame traces one sample per pixel and blends it into the accumulation buffer for progressive refinement.
+
 ```cuda
 // main.cu — Complete application: build scene, render, display
 #include "ray_tracer.cuh"
@@ -1411,6 +1413,8 @@ int main() {
 
 ## Step 8 — Build System
 
+This Makefile compiles all CUDA source files with Tensor Core support (`sm_70`+), links against OpenGL, GLEW, and GLFW for real-time display, and supports both `debug` and optimized builds. The separate `tests` target builds the unit test binary independently.
+
 ```makefile
 # Makefile
 NVCC      = nvcc
@@ -1553,6 +1557,8 @@ Total speedup: ~15×
 ## Testing Strategy
 
 ### Unit Tests
+
+These targeted unit tests validate each component in isolation: vector math operations, ray-AABB and ray-triangle intersection, BVH traversal correctness, material scattering behavior, and denoiser weight loading. Each test prints PASS/FAIL and the test counts are summarized at the end, providing a quick sanity check before running the full renderer.
 
 ```cuda
 // tests.cu — Targeted unit tests for each component

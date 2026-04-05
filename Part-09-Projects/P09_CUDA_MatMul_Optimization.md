@@ -684,9 +684,9 @@ nvcc -O3 -arch=sm_70 -o matmul_wmma matmul.cu     # Level 5 (requires Volta+)
 | **Identity matrix** | Verifies C = A when B = I |
 | **Powers of 2 vs. non-powers** | Padding / remainder-tile correctness |
 
+Use Nsight Compute (`ncu`) to profile the kernels and identify whether each level is memory-bound or compute-bound. The roofline analysis shows how close each kernel gets to the hardware's theoretical peak.
+
 ```bash
-# Run with Nsight Compute for detailed metrics
-ncu --set full ./matmul
 # Quick roofline analysis
 ncu --section SpeedOfLight ./matmul
 ```
@@ -696,6 +696,8 @@ ncu --section SpeedOfLight ./matmul
 ## Profiling Analysis
 
 ### Key Metrics to Examine
+
+These `ncu` commands collect the specific hardware counters that reveal the bottleneck at each optimization level — memory throughput for bandwidth-bound kernels, and FMA pipe utilization for compute-bound kernels.
 
 ```bash
 # Memory throughput (are we bandwidth-bound?)

@@ -68,6 +68,8 @@ graph TD
 
 ### `skip_list.hpp`
 
+This is the complete skip list implementation as a header-only C++ template. It uses a randomized tower of linked lists where each higher level acts as an "express lane" for faster search — achieving O(log n) average-case lookup, insertion, and deletion. The `random_level()` function uses a geometric distribution (coin flips) to determine how many levels each new node participates in, and the template parameter `MaxLevel` caps the tower height. This demonstrates probabilistic data structures as a practical alternative to balanced trees, with simpler code and comparable performance.
+
 ```cpp
 #pragma once
 #include <cassert>
