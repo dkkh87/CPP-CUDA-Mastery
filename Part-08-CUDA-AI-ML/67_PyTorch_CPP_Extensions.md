@@ -17,35 +17,23 @@ PyTorch's Python frontend is convenient for prototyping, but production workload
 
 ### Extension Architecture Overview
 
-```
-Python Layer          │  C++ Extension Layer      │  CUDA Layer
-──────────────────────┼───────────────────────────┼──────────────────
-import my_ext         │  pybind11 TORCH_LIBRARY    │  __global__ kernel
-my_ext.forward(x)  ──┼──► C++ wrapper function ───┼──► CUDA kernel launch
-                      │  torch::Tensor API         │  shared memory, warps
-autograd.backward() ──┼──► custom backward()    ───┼──► gradient kernel
-```
+The call path flows from Python through pybind11 into C++ wrapper functions that dispatch to CUDA kernels. Autograd backward calls follow the same path in reverse. The `torch::Tensor` type is shared across all layers — no data copying at boundaries.
 
 ### CppExtension vs CUDAExtension
 
 | Feature | CppExtension | CUDAExtension |
 |---|---|---|
-| Source files | `.cpp` only | `.cpp` + `.cu` |
-| Compiler | System C++ compiler | nvcc + host compiler |
+| Sources | `.cpp` only | `.cpp` + `.cu` |
+| Compiler | Host C++ | nvcc + host |
 | GPU kernels | No | Yes |
-| Use case | CPU-only custom ops | Custom CUDA kernels |
-| Setup | `CppExtension(...)` | `CUDAExtension(...)` |
 
-### JIT vs Setuptools Compilation
+### JIT vs Setuptools
 
 | Method | `load()` (JIT) | `setup.py` (Setuptools) |
 |---|---|---|
-| Build trigger | First `import` or `load()` call | Explicit `python setup.py install` |
-| Caching | `~/.cache/torch_extensions/` | Site-packages |
-| Best for | Development / prototyping | Production / distribution |
-| Rebuild | Automatic on source change | Manual reinstall |
-
----
+| Build trigger | First `load()` call | `pip install .` |
+| Best for | Development | Production |
+| Rebuild | Auto on source change | Manual reinstall |
 
 ## 2. Data Flow — Python to CUDA Kernel
 
@@ -66,8 +54,6 @@ flowchart LR
     style F fill:#10b981,color:#fff
     style G fill:#f59e0b,color:#fff
 ```
-
----
 
 ## 3. Code — Complete C++ Extension with CUDA
 
@@ -98,15 +84,11 @@ __global__ void relu_scale_backward_kernel(
     const scalar_t* __restrict__ grad_output,
     const scalar_t* __restrict__ input,
     scalar_t* __restrict__ grad_input,
-    const scalar_t scale,
-    const int64_t N)
+    const scalar_t scale, const int64_t N)
 {
     const int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < N) {
-        grad_input[idx] = (input[idx] > scalar_t(0))
-            ? grad_output[idx] * scale
-            : scalar_t(0);
-    }
+    if (idx < N)
+        grad_input[idx] = (input[idx] > scalar_t(0)) ? grad_output[idx] * scale : scalar_t(0);
 }
 
 // C++ wrapper dispatching to correct scalar type
@@ -133,23 +115,16 @@ torch::Tensor relu_scale_forward_cuda(torch::Tensor input, float scale) {
 torch::Tensor relu_scale_backward_cuda(
     torch::Tensor grad_output, torch::Tensor input, float scale)
 {
-    TORCH_CHECK(grad_output.is_cuda(), "grad_output must be CUDA");
-    TORCH_CHECK(input.is_cuda(), "input must be CUDA");
-
+    TORCH_CHECK(grad_output.is_cuda() && input.is_cuda());
     auto grad_input = torch::empty_like(input);
     const int64_t N = input.numel();
-    const int threads = 256;
-    const int blocks = (N + threads - 1) / threads;
+    const int threads = 256, blocks = (N + threads - 1) / threads;
 
     AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "relu_scale_backward", ([&] {
         relu_scale_backward_kernel<scalar_t><<<blocks, threads>>>(
-            grad_output.data_ptr<scalar_t>(),
-            input.data_ptr<scalar_t>(),
-            grad_input.data_ptr<scalar_t>(),
-            static_cast<scalar_t>(scale),
-            N);
+            grad_output.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(),
+            grad_input.data_ptr<scalar_t>(), static_cast<scalar_t>(scale), N);
     }));
-
     return grad_input;
 }
 ```
@@ -166,9 +141,8 @@ torch::Tensor relu_scale_forward_cuda(torch::Tensor input, float scale);
 torch::Tensor relu_scale_backward_cuda(
     torch::Tensor grad_output, torch::Tensor input, float scale);
 
-// Input validation macro
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be CUDA")
-#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " contiguous")
 #define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
 
 // Custom autograd Function
@@ -267,35 +241,23 @@ relu_scale_cuda = load(
 ```python
 # train_with_extension.py
 import torch
-import relu_scale_cuda  # Our compiled extension
+import relu_scale_cuda
 
-# Use the autograd-aware version
 x = torch.randn(1024, 512, device='cuda', requires_grad=True)
 y = relu_scale_cuda.relu_scale(x, scale=2.0)
+y.sum().backward()  # Calls our custom backward kernel automatically
+print(f"Output: {y.shape}, Grad nonzero: {(x.grad != 0).sum().item()}")
 
-loss = y.sum()
-loss.backward()  # Calls our custom backward kernel automatically
-
-print(f"Output shape: {y.shape}")
-print(f"Grad shape:   {x.grad.shape}")
-print(f"Grad nonzero: {(x.grad != 0).sum().item()}")
-
-# Integrate into an nn.Module
+# Integrate into nn.Module
 class ScaledReLUNet(torch.nn.Module):
-    def __init__(self, in_features, out_features, scale=2.0):
+    def __init__(self, in_feat, out_feat, scale=2.0):
         super().__init__()
-        self.linear = torch.nn.Linear(in_features, out_features)
+        self.linear = torch.nn.Linear(in_feat, out_feat)
         self.scale = scale
 
     def forward(self, x):
         return relu_scale_cuda.relu_scale(self.linear(x), self.scale)
-
-model = ScaledReLUNet(512, 256).cuda()
-out = model(x)
-out.sum().backward()
 ```
-
----
 
 ## 4. torch::Tensor C++ API Essentials
 
@@ -315,8 +277,6 @@ void tensor_api_demo() {
 }
 ```
 
----
-
 ## 5. LibTorch — Pure C++ Inference
 
 ### 5.1 Export from Python (TorchScript)
@@ -334,19 +294,12 @@ class MyModel(torch.nn.Module):
 
     def forward(self, x):
         x = torch.relu(self.bn1(self.conv1(x)))
-        x = x.view(x.size(0), -1)
-        return self.fc(x)
+        return self.fc(x.view(x.size(0), -1))
 
 model = MyModel().eval()
-example_input = torch.randn(1, 3, 32, 32)
-
-# Method 1: Trace (follows execution path)
-traced = torch.jit.trace(model, example_input)
-traced.save("model_traced.pt")
-
-# Method 2: Script (preserves control flow)
-scripted = torch.jit.script(model)
-scripted.save("model_scripted.pt")
+example = torch.randn(1, 3, 32, 32)
+torch.jit.trace(model, example).save("model_traced.pt")   # Static graphs
+torch.jit.script(model).save("model_scripted.pt")          # Dynamic control flow
 ```
 
 ### 5.2 LibTorch Deployment Architecture
@@ -384,7 +337,6 @@ flowchart TB
 // inference.cpp — Pure C++ inference, no Python dependency
 #include <torch/script.h>
 #include <iostream>
-#include <memory>
 #include <chrono>
 
 int main(int argc, const char* argv[]) {
@@ -408,37 +360,24 @@ int main(int argc, const char* argv[]) {
     if (torch::cuda::is_available()) {
         device = torch::Device(torch::kCUDA);
         module.to(device);
-        std::cout << "Running on GPU\n";
     }
 
-    // Prepare input (batch=1, channels=3, H=32, W=32)
+    // Prepare input and run inference
     auto input = torch::randn({1, 3, 32, 32}).to(device);
     std::vector<torch::jit::IValue> inputs{input};
 
-    // Warm-up
-    for (int i = 0; i < 10; ++i)
-        module.forward(inputs);
-
-    // Benchmark
-    torch::cuda::synchronize();
-    auto start = std::chrono::high_resolution_clock::now();
-
-    const int N_ITERS = 1000;
-    for (int i = 0; i < N_ITERS; ++i) {
-        auto output = module.forward(inputs).toTensor();
-    }
-
-    torch::cuda::synchronize();
-    auto end = std::chrono::high_resolution_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(end - start).count();
-
-    std::cout << "Avg latency: " << ms / N_ITERS << " ms\n";
-
-    // Get prediction
     auto output = module.forward(inputs).toTensor();
     auto pred = output.argmax(1).item<int64_t>();
     std::cout << "Predicted class: " << pred << "\n";
 
+    // Benchmark: 1000 iterations
+    torch::NoGradGuard no_grad;
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 1000; ++i) module.forward(inputs);
+    if (device.is_cuda()) torch::cuda::synchronize();
+    auto ms = std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - start).count();
+    std::cout << "Avg latency: " << ms / 1000.0 << " ms\n";
     return 0;
 }
 ```
@@ -446,44 +385,16 @@ int main(int argc, const char* argv[]) {
 ### 5.4 CMakeLists.txt for LibTorch
 
 ```cmake
-# CMakeLists.txt — Build C++ inference app against LibTorch
 cmake_minimum_required(VERSION 3.18)
 project(libtorch_inference LANGUAGES CXX)
-
 set(CMAKE_CXX_STANDARD 17)
 
-# Point to downloaded LibTorch
-# cmake -DCMAKE_PREFIX_PATH=/path/to/libtorch ..
-find_package(Torch REQUIRED)
-
+find_package(Torch REQUIRED)  # cmake -DCMAKE_PREFIX_PATH=/path/to/libtorch ..
 add_executable(inference inference.cpp)
 target_link_libraries(inference "${TORCH_LIBRARIES}")
-set_property(TARGET inference PROPERTY CXX_STANDARD 17)
-
-# Copy runtime DLLs on Windows
-if(MSVC)
-    file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
-    add_custom_command(TARGET inference POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${TORCH_DLLS} $<TARGET_FILE_DIR:inference>)
-endif()
 ```
 
-Build commands:
-
-```bash
-# Download LibTorch (C++ only, no Python)
-wget https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-deps-2.2.0%2Bcu121.zip
-unzip libtorch-*.zip
-
-# Build
-mkdir build && cd build
-cmake -DCMAKE_PREFIX_PATH=$(pwd)/../libtorch ..
-cmake --build . --config Release
-./inference ../model_traced.pt
-```
-
----
+Build: `mkdir build && cd build && cmake -DCMAKE_PREFIX_PATH=/path/to/libtorch .. && cmake --build .`
 
 ## 6. C++ Training Loop with LibTorch
 
@@ -507,95 +418,65 @@ struct ConvNet : torch::nn::Module {
         x = torch::relu(conv1->forward(x));
         x = torch::relu(conv2->forward(x));
         x = x.view({x.size(0), -1});
-        x = torch::relu(fc1->forward(x));
-        x = fc2->forward(x);
-        return torch::log_softmax(x, /*dim=*/1);
+        return torch::log_softmax(fc2->forward(torch::relu(fc1->forward(x))), 1);
     }
 };
 
 int main() {
-    torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
-
-    // MNIST dataset (download separately)
+    auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     auto dataset = torch::data::datasets::MNIST("./data")
         .map(torch::data::transforms::Stack<>());
     auto loader = torch::data::make_data_loader(
-        std::move(dataset),
-        torch::data::DataLoaderOptions().batch_size(64).workers(4));
+        std::move(dataset), torch::data::DataLoaderOptions().batch_size(64));
 
     ConvNet model;
     model.to(device);
-    torch::optim::Adam optimizer(model.parameters(),
-                                 torch::optim::AdamOptions(1e-3));
+    torch::optim::Adam optimizer(model.parameters(), torch::optim::AdamOptions(1e-3));
 
-    model.train();
     for (int epoch = 0; epoch < 5; ++epoch) {
-        double epoch_loss = 0.0;
-        int batch_count = 0;
-
+        double total_loss = 0; int n = 0;
         for (auto& batch : *loader) {
-            auto data   = batch.data.to(device);
-            auto target = batch.target.to(device);
-
+            auto data = batch.data.to(device), target = batch.target.to(device);
             optimizer.zero_grad();
-            auto output = model.forward(data);
-            auto loss   = torch::nll_loss(output, target);
+            auto loss = torch::nll_loss(model.forward(data), target);
             loss.backward();
             optimizer.step();
-
-            epoch_loss += loss.item<double>();
-            ++batch_count;
+            total_loss += loss.item<double>(); ++n;
         }
-        std::cout << "Epoch " << epoch + 1
-                  << " | Loss: " << epoch_loss / batch_count << "\n";
+        std::cout << "Epoch " << epoch+1 << " Loss: " << total_loss/n << "\n";
     }
-
-    // Save for later inference
     torch::save(model, "convnet.pt");
-    return 0;
 }
 ```
 
----
-
 ## 7. Performance: Python vs C++ Extension Overhead
 
-| Scenario | Typical Overhead | Notes |
+| Scenario | Overhead | Notes |
 |---|---|---|
-| Python op dispatch | 5-50 µs per call | GIL + interpreter |
-| C++ extension call | 1-5 µs per call | pybind11 marshaling |
-| LibTorch (pure C++) | <1 µs per call | No Python at all |
-| Kernel launch | ~5-10 µs | GPU driver overhead, same in both |
-| Large tensor compute | Negligible difference | GPU-bound, dispatch cost irrelevant |
+| Python op dispatch | 5-50 µs/call | GIL + interpreter |
+| C++ extension call | 1-5 µs/call | pybind11 marshaling |
+| LibTorch (pure C++) | <1 µs/call | No Python |
+| Large tensor compute | Negligible diff | GPU-bound, dispatch irrelevant |
 
-**Rule of thumb**: Extensions matter most for many small operations (custom activation, normalization). For large matrix ops, PyTorch's built-in CUDA kernels are already optimal.
-
----
+**Rule**: Extensions matter for many small ops (custom activations). For large matmuls, built-in kernels are already optimal.
 
 ## 8. Exercises
 
 ### 🟢 Exercise 1 — JIT Compile a CPU Extension
 
-Write a C++ function `double_tensor(torch::Tensor x)` that returns `x * 2`. Use `torch.utils.cpp_extension.load()` to JIT-compile and call it from Python.
+Write `double_tensor(torch::Tensor x)` returning `x * 2`. JIT-compile with `load()` and verify from Python.
 
 ### 🟡 Exercise 2 — CUDA Softmax Extension
 
-Implement a CUDA kernel for numerically stable softmax (subtract max, exponentiate, normalize). Expose it via `CUDAExtension` in `setup.py`. Verify outputs match `torch.softmax()` within `1e-5` tolerance.
+Implement a numerically stable softmax CUDA kernel (subtract max, exp, normalize). Build with `CUDAExtension` and verify against `torch.softmax()` within `1e-5`.
 
 ### 🟡 Exercise 3 — Custom Autograd Backward
 
-Extend the softmax extension from Exercise 2 to include a backward pass. Wrap it in a `torch::autograd::Function` and verify gradients using `torch.autograd.gradcheck()`.
+Add a backward pass to the softmax extension. Wrap in `torch::autograd::Function` and verify with `gradcheck()`.
 
-### 🔴 Exercise 4 — LibTorch Real-Time Inference Server
+### 🔴 Exercise 4 — LibTorch Inference Server
 
-Build a C++ application using LibTorch that:
-1. Loads a TorchScript ResNet-18 model
-2. Reads images from a directory
-3. Preprocesses (resize, normalize) using OpenCV
-4. Runs batch inference and prints top-5 predictions
-5. Reports throughput in images/second
-
----
+Build a C++ app that loads a TorchScript ResNet-18, preprocesses images with OpenCV, runs batch inference, and reports throughput in images/second.
 
 ## 9. Solutions
 
@@ -689,17 +570,7 @@ public:
 };
 ```
 
-```python
-# Verification
-import torch
-from torch.autograd import gradcheck
-
-x = torch.randn(4, 8, device='cuda', dtype=torch.float64, requires_grad=True)
-assert gradcheck(ext.softmax, (x,), eps=1e-6, atol=1e-4)
-print("Gradcheck passed!")
-```
-
----
+Verify with `torch.autograd.gradcheck(ext.softmax, (x,), eps=1e-6, atol=1e-4)` using float64 inputs.
 
 ## 10. Quiz
 
@@ -754,75 +625,64 @@ D) `torch.utils.build.CUDABuild`
 
 ### Answers
 
-| Q | Answer | Explanation |
+| Q | Ans | Key Reason |
 |---|---|---|
-| 1 | **C** | `AT_DISPATCH_FLOATING_TYPES` switches on the tensor's `scalar_type()` to instantiate the correct template (float or double). |
-| 2 | **B** | `load()` compiles sources on first call and caches the result. |
-| 3 | **B** | One `torch::Tensor` (or `torch::Tensor()` for non-differentiable inputs) per `forward()` argument. |
-| 4 | **B** | It returns a `torch::jit::script::Module` that wraps the TorchScript IR. |
-| 5 | **C** | `TORCH_CHECK` throws informative `c10::Error` exceptions with file/line info. |
-| 6 | **C** | LibTorch links directly against `libtorch.so` — no CPython interpreter needed. |
-| 7 | **B** | `BuildExtension` handles mixed C++/CUDA compilation, nvcc flags, and ABI compatibility. |
-
----
+| 1 | **C** | Switches on tensor's `scalar_type()` to instantiate the correct template |
+| 2 | **B** | `load()` compiles and caches; rebuilds on source change |
+| 3 | **B** | One gradient per `forward()` input; `torch::Tensor()` for non-differentiable |
+| 4 | **B** | Returns `torch::jit::script::Module` wrapping TorchScript IR |
+| 5 | **C** | `TORCH_CHECK` throws `c10::Error` with file/line info |
+| 6 | **C** | Links `libtorch.so` directly — no CPython needed |
+| 7 | **B** | Handles mixed C++/CUDA compilation and ABI |
 
 ## 11. Key Takeaways
 
-- **`CppExtension`** compiles CPU-only ops; **`CUDAExtension`** adds `.cu` file support with nvcc.
-- **`load()`** provides zero-config JIT compilation; **`setup.py`** is better for distribution.
-- **pybind11** is the glue — `PYBIND11_MODULE` exposes C++ functions to Python with automatic type conversion for `torch::Tensor`.
-- **Custom autograd Functions** require implementing both `forward()` and `backward()` as static methods, returning one gradient per forward input.
-- **`TORCH_CHECK`** replaces raw `assert()` — it throws structured errors and works in both debug and release builds.
-- **`AT_DISPATCH_FLOATING_TYPES`** eliminates manual template instantiation — it generates the correct code path based on the tensor's runtime dtype.
-- **LibTorch** enables Python-free inference: export via `torch.jit.trace`/`script`, load with `torch::jit::load()`, deploy as a standalone C++ binary.
-- **C++ training loops** are fully supported via `torch::nn`, `torch::optim`, and `torch::data` — identical API shape to Python.
-- For large tensor ops, Python vs C++ dispatch overhead is negligible. Extensions matter for **small, frequent operations**.
-
----
+- **`CppExtension`** = CPU-only ops; **`CUDAExtension`** = CPU + `.cu` kernels with nvcc.
+- **`load()`** = zero-config JIT compilation; **`setup.py`** = production distribution.
+- **pybind11** glues C++ to Python — `PYBIND11_MODULE` auto-converts `torch::Tensor`.
+- Custom **autograd Functions** need static `forward()` + `backward()`, one gradient per input.
+- **`TORCH_CHECK`** > `assert()` — works in release builds, throws structured `c10::Error`.
+- **`AT_DISPATCH_FLOATING_TYPES`** generates type-correct kernel instantiations at runtime.
+- **LibTorch** = Python-free inference: `torch.jit.trace/script` → `torch::jit::load()` → C++ binary.
+- Extensions matter for **small, frequent ops**; large tensor ops are GPU-bound regardless.
 
 ## 12. Chapter Summary
 
-This chapter covered the full stack for extending PyTorch with C++/CUDA and deploying models without Python. We built a complete custom CUDA extension — from kernel (`relu_scale_forward_kernel`) to pybind11 bindings to `setup.py` — and integrated it with PyTorch's autograd system. We then explored LibTorch for production deployment: serializing models as TorchScript, loading them in C++ with `torch::jit::load()`, and building standalone inference applications with CMake. Finally, we implemented a complete C++ training loop using the LibTorch `torch::nn` and `torch::optim` APIs, demonstrating that PyTorch's C++ frontend is a first-class citizen for both training and inference.
-
----
+This chapter covered extending PyTorch with C++/CUDA and deploying without Python. We built a complete CUDA extension — kernel, pybind11 bindings, `setup.py` — integrated with autograd. We serialized models as TorchScript and loaded them in C++ with `torch::jit::load()` for standalone inference, and implemented a full C++ training loop with LibTorch.
 
 ## 13. Real-World Insight
 
-**NVIDIA's FasterTransformer** (now TensorRT-LLM) started as a collection of PyTorch C++ extensions — custom CUDA kernels for multi-head attention, layer norm, and beam search wrapped via pybind11. Meta's production inference stack for ranking models uses LibTorch extensively: models are trained in Python, exported via TorchScript, and served by C++ inference servers handling millions of requests per second with sub-millisecond latency requirements. Tesla's Autopilot inference pipeline similarly uses LibTorch on custom hardware where Python is not available. The pattern is universal: **prototype in Python, optimize hot paths in CUDA, deploy in C++**.
-
----
+**NVIDIA's FasterTransformer** (now TensorRT-LLM) started as PyTorch C++ extensions — custom CUDA kernels for attention and beam search wrapped via pybind11. Meta's inference stack uses LibTorch for ranking models: trained in Python, exported via TorchScript, served by C++ at millions of QPS with sub-millisecond latency. Tesla's Autopilot runs LibTorch on custom hardware where Python is unavailable. The pattern: **prototype in Python, optimize in CUDA, deploy in C++**.
 
 ## 14. Common Mistakes
 
-| Mistake | Why It Fails | Fix |
-|---|---|---|
-| Forgetting `CHECK_CONTIGUOUS` | Non-contiguous tensors have gaps in memory; raw `data_ptr` reads wrong values | Always call `.contiguous()` or check with `TORCH_CHECK` |
-| Using `assert()` instead of `TORCH_CHECK` | `assert` is stripped in release builds, silently passing invalid inputs | Use `TORCH_CHECK` — active in all build modes |
-| Not returning `torch::Tensor()` for non-differentiable args | Autograd expects exactly one gradient per forward argument | Return `torch::Tensor()` (null) for constants |
-| Mixing CXX ABI versions | LibTorch pre-cxx11-abi vs system compiler using cxx11 ABI causes linker errors | Match `_GLIBCXX_USE_CXX11_ABI` between LibTorch and your build |
-| Tracing models with control flow | `torch.jit.trace` records a single execution path, ignoring if/else branches | Use `torch.jit.script` for models with dynamic control flow |
-| Forgetting `module.eval()` before export | BatchNorm and Dropout behave differently in train mode | Always call `.eval()` before tracing or scripting |
-
----
+| Mistake | Fix |
+|---|---|
+| Forgetting `CHECK_CONTIGUOUS` | Non-contiguous `data_ptr` reads wrong values — always check or call `.contiguous()` |
+| `assert()` instead of `TORCH_CHECK` | `assert` stripped in release; `TORCH_CHECK` active in all builds |
+| Not returning `torch::Tensor()` for non-diff args | Autograd expects exactly one gradient per forward argument |
+| CXX ABI mismatch | Match `_GLIBCXX_USE_CXX11_ABI` between LibTorch and compiler |
+| `trace()` with control flow | `trace` records one path; use `script` for if/else and dynamic loops |
+| Missing `module.eval()` before export | BatchNorm/Dropout behave differently in train mode |
 
 ## 15. Interview Questions
 
-### Q1: What is the difference between `torch.jit.trace()` and `torch.jit.script()`? When would you use each?
+### Q1: What is the difference between `torch.jit.trace()` and `torch.jit.script()`?
 
-**Answer:** `trace()` records operations by running the model with a concrete input — it captures the exact sequence of ops but **ignores control flow** (if/else, loops with data-dependent bounds). `script()` analyzes the Python source code and compiles it to TorchScript IR, **preserving control flow**. Use `trace()` for simple feed-forward models (ResNet, VGG) where the compute graph is static. Use `script()` for models with dynamic behavior — variable-length sequences, conditional computation, recursive structures. In practice, you can mix both: trace submodules with static graphs and script the top-level module that routes between them.
+**Answer:** `trace()` records operations by running the model with a concrete input — it captures the exact op sequence but **ignores control flow** (if/else, data-dependent loops). `script()` analyzes Python source and compiles to TorchScript IR, **preserving control flow**. Use `trace()` for static feed-forward models (ResNet, VGG). Use `script()` for models with dynamic behavior — variable-length sequences, conditional computation. You can mix both: trace static submodules and script the top-level router.
 
-### Q2: How does `AT_DISPATCH_FLOATING_TYPES` work, and why is it necessary?
+### Q2: How does `AT_DISPATCH_FLOATING_TYPES` work?
 
-**Answer:** `AT_DISPATCH_FLOATING_TYPES` is a macro that switches on a tensor's `ScalarType` at runtime and instantiates a template lambda for each floating-point type (float, double). Inside the lambda, the type alias `scalar_t` resolves to the concrete type. This is necessary because CUDA kernels are compiled C++ templates — they need concrete types at compile time — but PyTorch tensors carry their dtype at runtime. The macro bridges this gap, generating specialized kernel code for each supported type. Variants like `AT_DISPATCH_FLOATING_TYPES_AND_HALF` add float16 support, critical for mixed-precision training.
+**Answer:** It switches on a tensor's `ScalarType` at runtime and instantiates a template lambda for each floating-point type (float, double). Inside the lambda, `scalar_t` resolves to the concrete type. This bridges the gap between CUDA's compile-time templates and PyTorch's runtime dtypes. Variants like `AT_DISPATCH_FLOATING_TYPES_AND_HALF` add float16 support for mixed-precision training.
 
-### Q3: Explain how a custom `torch::autograd::Function` integrates with PyTorch's autograd engine.
+### Q3: How does a custom `torch::autograd::Function` integrate with autograd?
 
-**Answer:** You create a class inheriting from `torch::autograd::Function<YourClass>` with two static methods: `forward()` receives an `AutogradContext*` and input tensors, saves anything needed for the backward pass via `ctx->save_for_backward()`, and returns the output. `backward()` receives the saved context and upstream gradients (`grad_outputs`), computes local gradients, and returns a `variable_list` with one `torch::Tensor` per `forward()` input (or `torch::Tensor()` for non-differentiable inputs). When you call `YourClass::apply(inputs...)`, PyTorch registers a node in the autograd graph. During `loss.backward()`, the engine calls your `backward()` with the chain-rule gradients, and your custom CUDA kernel computes the local Jacobian-vector product.
+**Answer:** You subclass `torch::autograd::Function<YourClass>` with static `forward()` and `backward()`. Forward receives `AutogradContext*` to save tensors via `ctx->save_for_backward()`. Backward receives saved context and upstream gradients, returning a `variable_list` with one gradient per forward input (`torch::Tensor()` for non-differentiable args). Calling `YourClass::apply()` registers a node in the autograd graph; during `loss.backward()`, the engine invokes your custom backward.
 
-### Q4: What are the key considerations when deploying a LibTorch model to production?
+### Q4: What are key considerations for LibTorch production deployment?
 
-**Answer:** (1) **ABI compatibility** — the LibTorch build must match your compiler's C++ ABI (`cxx11` vs `pre-cxx11`). (2) **Model export** — choose trace vs script based on control flow requirements; test that the exported model produces identical outputs. (3) **Input preprocessing** — all transforms (resize, normalize, tokenize) must be reimplemented in C++ since Python preprocessing code doesn't transfer. (4) **Thread safety** — `torch::jit::Module` is thread-safe for inference after calling `.eval()`, but use `torch::NoGradGuard` to disable gradient tracking. (5) **GPU memory** — use CUDA streams for concurrent inference and `torch::cuda::synchronize()` for benchmarking. (6) **Error handling** — catch `c10::Error` exceptions; LibTorch doesn't print Python tracebacks.
+**Answer:** (1) **ABI compatibility** — match `_GLIBCXX_USE_CXX11_ABI` between LibTorch and your compiler. (2) **Input preprocessing** — reimplement all transforms in C++ since Python code doesn't transfer. (3) **Thread safety** — call `.eval()` and use `torch::NoGradGuard`; the module is then safe for concurrent inference. (4) **Error handling** — catch `c10::Error`; no Python tracebacks available. (5) **GPU memory** — use CUDA streams for concurrent inference.
 
-### Q5: When should you write a PyTorch C++ extension versus using `torch.compile()` or existing PyTorch ops?
+### Q5: When should you write a C++ extension vs use `torch.compile()`?
 
-**Answer:** Use C++ extensions when: (1) you need a **fused kernel** combining multiple ops that `torch.compile` cannot fuse (e.g., custom attention with non-standard masking), (2) you need **non-tensor side effects** like custom memory management or hardware-specific intrinsics, (3) you're writing operators for **new hardware** not supported by PyTorch's backend, or (4) the operation requires **warp-level primitives** (`__shfl_sync`, cooperative groups) that can't be expressed in PyTorch. Prefer `torch.compile()` (Inductor) for standard op compositions — it automatically generates triton/CUDA code with less engineering effort. Prefer existing PyTorch ops when they exist, as they are extensively tested and optimized.
+**Answer:** Write C++ extensions for: fused kernels that `torch.compile` cannot fuse, warp-level CUDA primitives (`__shfl_sync`), custom memory management, or new hardware backends. Prefer `torch.compile()` for standard op compositions — it auto-generates optimized CUDA/Triton code with less effort. Prefer existing PyTorch ops when available, as they are extensively tested and optimized.

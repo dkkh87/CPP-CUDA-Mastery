@@ -4,7 +4,6 @@
 **Tags:** `cuDNN` · `Deep Learning` · `Convolution` · `GPU Acceleration` · `Neural Networks` · `CUDA Libraries`
 
 ---
-
 ## 1. Theory: What Is cuDNN and Why Does It Matter?
 
 ### What
@@ -46,8 +45,6 @@ cuDNN implements several convolution strategies and picks the best one per probl
 | **Winograd** | 3×3 filters, stride 1 | Minimal workspace; numerically less stable at FP16 |
 | **Direct** | Tiny inputs or depthwise convolutions | Small workspace; lower peak FLOPS |
 
----
-
 ## 2. cuDNN Execution Pipeline
 
 ```mermaid
@@ -64,8 +61,6 @@ flowchart LR
     style C fill:#e76f51,color:#fff
     style F fill:#264653,color:#fff
 ```
-
----
 
 ## 3. Convolution Algorithm Decision Tree
 
@@ -464,8 +459,6 @@ Starting with cuDNN v8, the **Frontend API** replaces manual algorithm enumerati
 
 > **Key advantage:** The Frontend API sees the entire sub-graph (conv → bias → relu → pooling) at once and fuses aggressively across operations.
 
----
-
 ## 5. Performance Considerations
 
 ### NCHW vs NHWC
@@ -484,14 +477,11 @@ Small workspace  →  Fewer algorithm choices  →  Possibly slower
 Large workspace  →  FFT/Winograd available   →  Often faster
 ```
 
-A practical rule of thumb: budget **4× the output tensor size** for workspace. Use `cudnnFindConvolutionForwardAlgorithmEx` to auto-tune within your budget.
+Budget **4× the output tensor size** for workspace. Use `cudnnFindConvolutionForwardAlgorithmEx` to auto-tune within your budget.
 
 ### Padding and Dilation
 
-- **Padding** controls output spatial dimensions. cuDNN supports asymmetric padding via the convolution descriptor.
-- **Dilation** enlarges the receptive field without extra parameters. Set dilation > 1 in `cudnnSetConvolution2dDescriptor`.
-
----
+cuDNN supports asymmetric padding via the convolution descriptor. Dilation enlarges the receptive field without extra parameters — set dilation > 1 in `cudnnSetConvolution2dDescriptor`.
 
 ## 6. Common Mistakes
 
@@ -505,8 +495,6 @@ A practical rule of thumb: budget **4× the output tensor size** for workspace. 
 | 6 | Ignoring alpha/beta semantics | Accidental accumulation or zeroing | `beta=0` overwrites output; `beta=1` accumulates |
 | 7 | Not setting math type for Tensor Cores | Missing 2-8× speedup on Volta+ | Call `cudnnSetConvolutionMathType(conv, CUDNN_TENSOR_OP_MATH)` |
 | 8 | Passing CPU pointers for alpha/beta | Crash or wrong results | alpha/beta are **host** pointers to floats — this is correct; do not use device pointers |
-
----
 
 ## 7. Exercises
 
@@ -535,8 +523,6 @@ Build a complete 3-layer CNN inference pipeline using cuDNN:
 
 Load random weights, run a single forward pass on a 32×3×32×32 input, and verify the softmax output sums to 1.0.
 
----
-
 ## 8. Solutions
 
 ### Solution 1
@@ -544,20 +530,16 @@ Load random weights, run a single forward pass on a 32×3×32×32 input, and ver
 ```cpp
 #include <cudnn.h>
 #include <cstdio>
-
 int main() {
     cudnnHandle_t handle;
     cudnnCreate(&handle);
-
     cudnnTensorDescriptor_t desc;
     cudnnCreateTensorDescriptor(&desc);
     cudnnSetTensor4dDescriptor(desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
                                16, 3, 224, 224);
-
     size_t bytes = 16 * 3 * 224 * 224 * sizeof(float);
     printf("Tensor: 16x3x224x224, total bytes: %zu (%.1f MB)\n",
            bytes, bytes / (1024.0 * 1024.0));
-
     cudnnDestroyTensorDescriptor(desc);
     cudnnDestroy(handle);
     return 0;
@@ -567,9 +549,7 @@ int main() {
 ### Solution 2
 
 ```cpp
-#include <cudnn.h>
-#include <cstdio>
-
+// Same includes as Solution 1
 int main() {
     cudnnHandle_t handle;
     cudnnCreate(&handle);
@@ -578,17 +558,14 @@ int main() {
     cudnnCreateTensorDescriptor(&in_desc);
     cudnnSetTensor4dDescriptor(in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
                                1, 3, 64, 64);
-
     cudnnFilterDescriptor_t filt;
     cudnnCreateFilterDescriptor(&filt);
     cudnnSetFilter4dDescriptor(filt, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
                                16, 3, 3, 3);
-
     cudnnConvolutionDescriptor_t conv;
     cudnnCreateConvolutionDescriptor(&conv);
     cudnnSetConvolution2dDescriptor(conv, 1, 1, 1, 1, 1, 1,
                                     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT);
-
     int n, c, h, w;
     cudnnGetConvolution2dForwardOutputDim(conv, in_desc, filt, &n, &c, &h, &w);
     printf("Output: %d x %d x %d x %d\n", n, c, h, w);
@@ -617,8 +594,6 @@ for (int i = 0; i < returned; i++) {
 }
 // The first entry (perf[0]) is the fastest that succeeded.
 ```
-
----
 
 ## 9. Quiz
 
@@ -676,8 +651,6 @@ for (int i = 0; i < returned; i++) {
 | 6 | **(c)** | The fused API merges conv + bias + activation, eliminating extra memory round-trips. |
 | 7 | **(b)** | The Frontend API uses operation graphs; cuDNN generates and ranks execution plans. |
 
----
-
 ## 10. Key Takeaways
 
 - **cuDNN abstracts GPU kernel complexity** — you describe *what* to compute (via descriptors), and cuDNN decides *how* to compute it optimally.
@@ -689,21 +662,15 @@ for (int i = 0; i < returned; i++) {
 - **Every descriptor must be destroyed** — treat them like heap allocations; use RAII wrappers in production code.
 - **Alpha/beta scaling** follows `y = alpha * op(x) + beta * y` — understanding this pattern is essential for accumulation and residual connections.
 
----
-
 ## 11. Chapter Summary
 
-cuDNN is the performance foundation beneath every major deep learning framework. This chapter walked through its architecture — handles, descriptors, algorithm selection, and workspaces — and demonstrated a complete MNIST-sized forward pass. We explored the six convolution algorithms cuDNN offers, how to auto-tune among them, and the dramatic speedups available through operation fusion. The cuDNN Frontend API (v8+) represents the next evolution: rather than manually selecting algorithms, you build an operation graph and let cuDNN generate globally-optimized execution plans. For production deployment, always prefer NHWC layout with Tensor Core math enabled, budget adequate workspace memory, and use RAII patterns to manage the numerous descriptors.
-
----
+cuDNN is the performance foundation beneath every major deep learning framework. This chapter covered its architecture — handles, descriptors, algorithm selection, and workspaces — and demonstrated a complete forward pass. We explored six convolution algorithms, auto-tuning, and the speedups from operation fusion. The Frontend API (v8+) represents the next evolution: operation graphs with globally-optimized execution plans. For production, prefer NHWC layout with Tensor Core math, budget adequate workspace, and use RAII patterns for descriptor management.
 
 ## 12. Real-World Insight
 
 > **How PyTorch uses cuDNN:** When you call `torch.nn.Conv2d`, PyTorch creates cuDNN descriptors behind the scenes. With `torch.backends.cudnn.benchmark = True`, it runs `cudnnFindConvolutionForwardAlgorithm` on the first forward pass per unique shape and caches the winner. This is why the first training iteration is slower. In inference engines (TensorRT, ONNX Runtime), algorithm selection happens at build time and is baked into the serialized engine.
 
 > **Workspace in practice:** LLM training frameworks (Megatron-LM, DeepSpeed) budget hundreds of megabytes for cuDNN workspace. 256 MB might unlock an FFT algorithm that is 40% faster than the fallback implicit GEMM — easily justified on an 80 GB A100.
-
----
 
 ## 13. Interview Questions
 
