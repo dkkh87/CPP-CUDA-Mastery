@@ -98,6 +98,8 @@ Declare in headers, define in source files. Choose the right parameter passing m
 
 ### Example 1 — Parameter Passing Modes
 
+This example demonstrates the four ways to pass arguments in C++: by value (a copy is made, so the original is unchanged), by reference (the function modifies the original), by const reference (read-only access without copying — ideal for large objects like strings), and by pointer (allows passing `nullptr` for optional parameters).
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -144,6 +146,8 @@ int main() {
 
 ### Example 2 — Function Overloading
 
+Function overloading lets you define multiple functions with the same name but different parameter lists. The compiler picks the right version based on the arguments you pass. Here, `area()` is overloaded three times to compute the area of a circle, rectangle, or triangle, and `log()` is overloaded to accept one or two strings.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -187,6 +191,8 @@ int main() {
 ```
 
 ### Example 3 — Default Arguments & constexpr
+
+Default arguments let callers omit trailing parameters that have sensible defaults, simplifying common calls. `constexpr` functions can be evaluated at compile time when given constant inputs, enabling their use in `static_assert` and array sizes. This example combines both features and shows `[[nodiscard]]` on a `constexpr` clamp function.
 
 ```cpp
 #include <iostream>
@@ -240,6 +246,8 @@ int main() {
 ```
 
 ### Example 4 — [[nodiscard]] and Return Value Patterns
+
+The `[[nodiscard]]` attribute generates a compiler warning when a function's return value is ignored — essential for error-reporting functions where silent failure is dangerous. This example also shows `std::optional` for functions that might not produce a result, and returning a custom struct for multiple return values with structured bindings.
 
 ```cpp
 #include <iostream>
@@ -300,6 +308,8 @@ int main() {
 ```
 
 ### Example 5 — Recursion with Memoization
+
+This example contrasts naive recursive Fibonacci (which recalculates the same values exponentially many times) with a memoized version that caches results in a hash map for O(n) performance. Memoization is a general technique for optimizing any recursive function that has overlapping subproblems.
 
 ```cpp
 #include <iostream>
@@ -434,6 +444,8 @@ Implement the Tower of Hanoi recursively, printing each move. Count total moves 
 
 ### Solution 1: Min/Max/Clamp
 
+This solution implements a `constexpr` clamp function using the ternary operator, overloaded for both `int` and `double`. Because it's `constexpr`, the compiler can evaluate it at compile time, which is verified by `static_assert` tests.
+
 ```cpp
 #include <iostream>
 
@@ -458,6 +470,8 @@ int main() {
 ```
 
 ### Solution 2: String Utilities
+
+This solution builds `to_upper`, `to_lower`, and `trim` functions using `std::transform` and `std::find_if_not` from the `<algorithm>` header. Each function takes its string parameter by value (so the original is not modified) and returns the transformed copy, demonstrating idiomatic C++ string processing.
 
 ```cpp
 #include <iostream>
@@ -495,6 +509,8 @@ int main() {
 
 ### Solution 3: Fast Power
 
+This solution computes integer exponentiation using the "exponentiation by squaring" algorithm, which runs in O(log n) time instead of O(n). It repeatedly squares the base and multiplies only when the current bit of the exponent is set. The function is `constexpr`, so it can be verified at compile time with `static_assert`.
+
 ```cpp
 #include <iostream>
 
@@ -521,6 +537,8 @@ int main() {
 ```
 
 ### Solution 4: Function Composition
+
+This solution creates a `compose` template function that takes two functions `f` and `g` and returns a new function that applies `g` first, then `f` (i.e., `f(g(x))`). It uses lambdas to capture the two functions, demonstrating higher-order programming in C++ — a technique common in functional programming.
 
 ```cpp
 #include <iostream>
@@ -554,6 +572,8 @@ int main() {
 ```
 
 ### Solution 5: Tower of Hanoi
+
+This classic recursion example moves `n` disks between three pegs. The key insight is that to move `n` disks from A to C, you first move `n-1` disks to the auxiliary peg, move the largest disk, then move `n-1` disks from the auxiliary to the target. The total number of moves is always 2ⁿ − 1.
 
 ```cpp
 #include <iostream>
@@ -664,6 +684,9 @@ This chapter established functions as the fundamental building blocks of C++ pro
 ## 11. Common Mistakes
 
 ### Mistake 1: Returning Reference to Local Variable
+
+Returning a reference to a local variable is undefined behavior because the variable is destroyed when the function exits, leaving a dangling reference. The fix is to return by value — modern compilers apply copy elision (NRVO) to make this efficient.
+
 ```cpp
 // BAD — returns reference to destroyed local!
 int& get_value() {
@@ -678,6 +701,9 @@ int get_value() {
 ```
 
 ### Mistake 2: Default Arguments in Definition (not Declaration)
+
+Default argument values must be specified in the function declaration (typically in the header file), not in the definition (the source file). Placing them in the definition causes a compiler error because callers only see the declaration.
+
 ```cpp
 // BAD — default in definition, not declaration
 // header: void greet(std::string name);
@@ -689,6 +715,9 @@ int get_value() {
 ```
 
 ### Mistake 3: Ambiguous Overloads
+
+When a `float` argument is passed and both `int` and `double` overloads exist, the compiler cannot decide which implicit conversion to use, resulting in an ambiguity error. The fix is to add an explicit `float` overload or cast the argument at the call site.
+
 ```cpp
 void print(int x) { std::cout << "int: " << x << '\n'; }
 void print(double x) { std::cout << "double: " << x << '\n'; }
@@ -698,6 +727,9 @@ void print(float x) { print(static_cast<double>(x)); }
 ```
 
 ### Mistake 4: Forgetting [[nodiscard]] on Fallible Functions
+
+Without `[[nodiscard]]`, a caller can silently ignore the return value of a function that reports success or failure, leading to undetected errors. Adding `[[nodiscard]]` makes the compiler emit a warning whenever the return value is discarded.
+
 ```cpp
 // BAD — caller can silently ignore failure
 bool connect_to_server(const std::string& host);

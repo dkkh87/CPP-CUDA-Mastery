@@ -73,6 +73,8 @@ Use `if`/`else` for binary decisions, `switch` for multi-way branching on discre
 
 ### Example 1 — if/else with C++17 Init-Statement
 
+This example shows C++17's init-statement inside an `if`, which lets you declare a variable (like a map iterator) and test it in one line. The variable is scoped to the `if`/`else` block, keeping the surrounding code clean and preventing accidental reuse of temporary lookup results.
+
 ```cpp
 #include <iostream>
 #include <map>
@@ -106,6 +108,8 @@ int main() {
 ```
 
 ### Example 2 — Modern switch Statement
+
+This example demonstrates using `switch` with a strongly-typed `enum class` to handle HTTP status codes. By omitting a `default` case, the compiler can warn you if you forget to handle a new enum value. It also shows the C++17 init-statement inside `switch`, which keeps the variable scoped to the switch block.
 
 ```cpp
 #include <iostream>
@@ -156,6 +160,8 @@ int main() {
 
 ### Example 3 — Loop Varieties
 
+This example compares the four main loop styles in C++: the classic index-based `for` (when you need the position), the range-based `for` (the cleanest way to iterate), `while` (for condition-driven loops), and `do-while` (which guarantees at least one execution). Each has a specific use case, and choosing the right one makes your intent clearer.
+
 ```cpp
 #include <iostream>
 #include <vector>
@@ -202,6 +208,8 @@ int main() {
 ```
 
 ### Example 4 — Structured Bindings (C++17)
+
+Structured bindings let you unpack pairs, tuples, arrays, and structs into named variables with `auto [a, b] = ...`. This example shows the four most common uses: iterating a map with `[key, value]`, unpacking a tuple returned from a function, decomposing an array, and capturing the result of `map::insert` which returns an iterator-bool pair.
 
 ```cpp
 #include <iostream>
@@ -250,6 +258,8 @@ int main() {
 ```
 
 ### Example 5 — Guard Clauses & Early Return
+
+This example contrasts deeply nested `if` blocks (the "bad" approach) with guard clauses that return early on invalid input (the "good" approach). Guard clauses check for error conditions first and exit immediately, keeping the main logic at the shallowest nesting level and making the code much easier to read.
 
 ```cpp
 #include <iostream>
@@ -310,6 +320,8 @@ int main() {
 ```
 
 ### Example 6 — Breaking Out of Nested Loops
+
+When searching a 2D matrix, `break` only exits the innermost loop. This example shows three strategies to break out of nested loops: using a boolean flag (verbose but common), using `goto` (controversial but concise), and wrapping the loops in a lambda so you can `return` from it. The lambda approach is the most modern and recommended.
 
 ```cpp
 #include <iostream>
@@ -438,6 +450,8 @@ Implement a text parser state machine that counts words, lines, and characters i
 
 ### Solution 1: FizzBuzz
 
+This solution uses chained `if`/`else if` to print "FizzBuzz" for multiples of 15, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and the number otherwise. Testing `% 15` first avoids printing "Fizz" or "Buzz" alone when both conditions are true.
+
 ```cpp
 #include <iostream>
 
@@ -454,6 +468,8 @@ int main() {
 ```
 
 ### Solution 2: Number Guessing Game
+
+This solution uses a `do-while` loop to guarantee the player gets at least one guess. A random target is generated using C++'s `<random>` library (preferred over `rand()`), and the loop continues giving "Higher!" or "Lower!" hints until the correct number is found.
 
 ```cpp
 #include <iostream>
@@ -484,6 +500,8 @@ int main() {
 ```
 
 ### Solution 3: Menu System
+
+This solution combines a `do-while` loop with a `switch` statement to build an interactive menu. The `do-while` ensures the menu displays at least once, and `switch` dispatches the user's choice to add, list, or remove items from a vector. Each `case` uses `break` to prevent fall-through.
 
 ```cpp
 #include <iostream>
@@ -544,6 +562,8 @@ int main() {
 
 ### Solution 4: Diamond Pattern
 
+This solution prints a diamond shape using nested `for` loops. The top half grows from 1 star to `width` stars by adding 2 each row, while the bottom half mirrors it in reverse. Leading spaces are calculated as `half - row` to center each line, demonstrating precise loop control for pattern generation.
+
 ```cpp
 #include <iostream>
 
@@ -574,6 +594,8 @@ int main() {
 ```
 
 ### Solution 5: Word/Line/Char Counter (State Machine)
+
+This solution implements a finite state machine with two states (`InWord` and `OutOfWord`) to count words, lines, and characters. A `switch` statement drives the transitions: when a non-space character is encountered while `OutOfWord`, the state flips to `InWord` and the word count increments. This pattern is the foundation of parsers and tokenizers.
 
 ```cpp
 #include <iostream>
@@ -712,6 +734,9 @@ This chapter covered C++'s control flow constructs from basic `if`/`else` and `s
 ## 11. Common Mistakes
 
 ### Mistake 1: Forgetting `break` in switch
+
+Without `break`, execution "falls through" from one `case` into the next, so matching `case 1` would also run `case 2`'s code. Always add `break` at the end of each case, or use `[[fallthrough]]` to signal that the fall-through is intentional.
+
 ```cpp
 switch (x) {
     case 1: std::cout << "one\n";    // Falls through!
@@ -725,6 +750,9 @@ switch (x) {
 ```
 
 ### Mistake 2: Off-by-One in Loops
+
+Using `<=` instead of `<` in the loop condition causes an out-of-bounds access on the last iteration. For an array of size 5, valid indices are 0–4, so the condition should be `i < 5`. Range-based `for` eliminates this mistake entirely.
+
 ```cpp
 // BAD: accesses arr[5] which is out of bounds for arr[5]
 int arr[5] = {1, 2, 3, 4, 5};
@@ -736,6 +764,9 @@ for (int val : arr) std::cout << val;
 ```
 
 ### Mistake 3: Infinite Loop from Unsigned Underflow
+
+An `unsigned int` can never be negative, so the condition `i >= 0` is always true. When `i` decrements past zero it wraps around to the maximum unsigned value, creating an infinite loop. The fix is to use a signed `int` for countdown loops.
+
 ```cpp
 // BAD: i is unsigned, so i >= 0 is ALWAYS true!
 for (unsigned int i = 10; i >= 0; --i) {
@@ -748,6 +779,9 @@ for (int i = 10; i >= 0; --i) {
 ```
 
 ### Mistake 4: Modifying Container While Iterating
+
+Calling `erase()` on a vector while iterating with iterators invalidates those iterators, causing undefined behavior. The fix is the erase-remove idiom, which moves unwanted elements to the end first and then erases them in one call. C++20 simplifies this with `std::erase_if`.
+
 ```cpp
 std::vector<int> v{1, 2, 3, 4, 5};
 // BAD: erasing invalidates iterators!

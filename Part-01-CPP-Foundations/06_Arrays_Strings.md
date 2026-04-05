@@ -108,6 +108,8 @@ Use `std::array` for fixed-size collections, `std::string` for owned text, and `
 
 ### Example 1 — C-Style Arrays and Their Pitfalls
 
+This example highlights the main danger of C-style arrays: when passed to a function, they "decay" into a pointer and lose their size information. The `sizeof` trick only works in the same scope where the array is declared. A template trick can preserve the size at compile time, but the modern solution is to use `std::array` instead.
+
 ```cpp
 #include <iostream>
 #include <cstddef>
@@ -147,6 +149,8 @@ int main() {
 ```
 
 ### Example 2 — std::array: The Modern Fixed-Size Container
+
+`std::array` is the modern replacement for C-style arrays. It knows its own size, provides bounds-checked access via `.at()`, works with all standard algorithms like `std::sort` and `std::accumulate`, and can even be used at compile time with `constexpr`. Unlike C arrays, it can be returned from functions.
 
 ```cpp
 #include <iostream>
@@ -201,6 +205,8 @@ int main() {
 ```
 
 ### Example 3 — std::string Operations
+
+This example tours the most common `std::string` operations: construction, concatenation with `+` and `+=`, searching with `find()`, replacing substrings, converting to/from numbers with `std::stoi` and `std::to_string`, and splitting text with `std::istringstream`. These are the building blocks for most text processing tasks in C++.
 
 ```cpp
 #include <iostream>
@@ -266,6 +272,8 @@ int main() {
 
 ### Example 4 — Small String Optimization (SSO) Demonstration
 
+Most `std::string` implementations store short strings directly inside the object (on the stack) instead of allocating heap memory — this is called Small String Optimization (SSO). This example detects whether SSO is active by checking if the string's data pointer falls within the object's own memory range, showing the performance benefit for short strings.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -302,6 +310,8 @@ int main() {
 ```
 
 ### Example 5 — std::string_view: Zero-Copy String References
+
+`std::string_view` is a lightweight, non-owning reference to a string that avoids copying. It works with string literals, `std::string`, and `char*` equally well. This example shows zero-allocation key-value parsing and word counting using `string_view`, demonstrating why it's preferred for read-only string parameters. Caution: the underlying string must outlive the view.
 
 ```cpp
 #include <iostream>
@@ -373,6 +383,8 @@ int main() {
 ```
 
 ### Example 6 — Migrating from C-Style to Modern C++
+
+This side-by-side comparison shows the same tasks done in legacy C style (raw `char` buffers, `strcpy`, `strcat`, C arrays with `qsort`) and then in modern C++ (`std::string`, `std::array`, standard algorithms). The modern approach is safer, shorter, and eliminates buffer overflow risks entirely.
 
 ```cpp
 #include <iostream>
@@ -533,6 +545,8 @@ Implement a basic `MyString` class with: constructor from `const char*`, copy co
 
 ### Solution 1: Array Statistics
 
+This solution uses `std::array` with template functions to compute mean and standard deviation. `std::accumulate` sums the elements, and a lambda accumulator computes the sum of squared deviations. The template parameter `N` lets the same functions work with arrays of any size.
+
 ```cpp
 #include <iostream>
 #include <array>
@@ -566,6 +580,8 @@ int main() {
 ```
 
 ### Solution 2: String Reversal
+
+This solution shows three ways to reverse a string: returning a reversed copy using `std::reverse`, constructing a new string from reverse iterators of a `string_view`, and doing an in-place reversal by swapping characters from both ends toward the middle. Each approach suits a different use case depending on whether you need to preserve the original.
 
 ```cpp
 #include <iostream>
@@ -606,6 +622,8 @@ int main() {
 
 ### Solution 3: CSV Parser (Zero-Allocation Tokens)
 
+This parser splits a CSV line into fields using `string_view::find()` and `substr()`, which return views into the original string without allocating any new memory. The resulting `vector<string_view>` holds lightweight references to the original data, making this approach very efficient for parsing large files.
+
 ```cpp
 #include <iostream>
 #include <string_view>
@@ -642,6 +660,8 @@ int main() {
 ```
 
 ### Solution 4: Palindrome Checker
+
+This `constexpr` palindrome checker uses two pointers that move inward from both ends of the string, skipping non-alphanumeric characters and comparing in a case-insensitive manner. Because it's `constexpr`, the compiler can evaluate it at compile time, as verified by the `static_assert` tests.
 
 ```cpp
 #include <iostream>
@@ -693,6 +713,8 @@ int main() {
 ```
 
 ### Solution 5: Simple String Class
+
+This solution builds a minimal string class from scratch using raw `char*` memory, implementing the Rule of Five: constructor, copy constructor, copy assignment (using the copy-and-swap idiom), move constructor, and move assignment. It demonstrates manual memory management to help you understand what `std::string` does under the hood.
 
 ```cpp
 #include <iostream>
@@ -864,6 +886,9 @@ This chapter bridged C++'s dual heritage of C-style arrays and strings with thei
 ## 11. Common Mistakes
 
 ### Mistake 1: Dangling string_view
+
+Returning a `string_view` from a function where it references a local `std::string` is undefined behavior — the string is destroyed when the function returns, leaving the view pointing at freed memory. Always return `std::string` when the function creates the data.
+
 ```cpp
 // BAD — string_view outlives the string
 std::string_view get_name() {
@@ -877,6 +902,9 @@ std::string get_name() {
 ```
 
 ### Mistake 2: Using sizeof on Decayed Array
+
+When a C-style array is passed to a function, it decays to a pointer, so `sizeof(arr)` returns the size of a pointer (typically 8 bytes), not the array. This makes the `sizeof(arr)/sizeof(arr[0])` trick produce wrong results inside functions. Use `std::array`, pass the size explicitly, or use `std::span` (C++20).
+
 ```cpp
 void process(int arr[]) {
     // BAD — sizeof(arr) is sizeof(int*), not the array!
@@ -889,6 +917,9 @@ void process(std::span<int> arr) {  // C++20
 ```
 
 ### Mistake 3: Concatenating string_views Inefficiently
+
+Converting each `string_view` to a `std::string` just to concatenate them creates unnecessary temporary heap allocations. Instead, pre-allocate with `reserve()` and use `append()` to build the result in one buffer, avoiding the overhead of repeated allocations.
+
 ```cpp
 // BAD — creates temporary strings
 std::string result = std::string(sv1) + std::string(sv2) + std::string(sv3);
@@ -902,6 +933,9 @@ result.append(sv3);
 ```
 
 ### Mistake 4: Off-by-One with Null Terminator
+
+C-strings require a null terminator (`\0`) at the end, so the string `"Hello"` actually needs 6 bytes of storage. Allocating only 5 bytes causes `strcpy` to write past the buffer — a classic buffer overflow bug. The safest fix is to use `std::string`, which manages the terminator automatically.
+
 ```cpp
 // BAD — buffer too small for null terminator
 char buf[5];
@@ -914,6 +948,9 @@ std::strcpy(buf, "Hello");
 ```
 
 ### Mistake 5: Comparing Strings with ==  on C-Strings
+
+Using `==` on two `const char*` pointers compares their memory addresses, not their content. Two identical string literals might or might not share the same address depending on the compiler. Use `std::strcmp` for C-strings, or better yet, use `std::string` where `==` compares content correctly.
+
 ```cpp
 const char* a = "hello";
 const char* b = "hello";
