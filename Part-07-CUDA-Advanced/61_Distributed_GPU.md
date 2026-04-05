@@ -92,6 +92,8 @@ int main(int argc, char** argv) {
 
 ### MPI Collective with GPU Buffers
 
+This example performs an `MPI_Allreduce` (sum) directly on GPU buffers, demonstrating how CUDA-aware MPI handles collective operations without manual host staging. Each MPI rank initializes its GPU buffer with a value based on its rank, and the AllReduce sums across all ranks. The result on every GPU should equal the sum of all rank values, confirming correct GPU-direct collective behavior.
+
 ```cpp
 #include <mpi.h>
 #include <cuda_runtime.h>
@@ -154,6 +156,8 @@ GPU0 → PCIe → CPU0 → Host RAM → NIC → Network → NIC → Host RAM →
 Each hop adds latency and uses CPU/memory bandwidth. GPUDirect technologies progressively eliminate hops.
 
 ### GPUDirect Variants
+
+This snippet shows how to use GPUDirect Peer-to-Peer (P2P) to transfer data directly between two GPUs over NVLink, bypassing the CPU entirely. First, you check whether P2P access is supported between the two devices with `cudaDeviceCanAccessPeer`, then enable it in both directions. Once enabled, `cudaMemcpyPeer` performs the transfer through the fastest available interconnect (NVLink if present, PCIe otherwise).
 
 ```cpp
 // GPUDirect P2P: Direct GPU-to-GPU transfer (same node, via NVLink)
@@ -251,6 +255,8 @@ int main() {
 
 ### NCCL AllGather and ReduceScatter
 
+This code demonstrates two complementary NCCL collectives. AllGather collects each GPU's chunk and replicates the full concatenated result to every GPU. ReduceScatter is the inverse — it element-wise reduces (sums) all GPUs' full buffers, then distributes one chunk of the result to each GPU. Together, these two operations form the building blocks of tensor parallelism used in large model training.
+
 ```cpp
 #include <nccl.h>
 #include <cuda_runtime.h>
@@ -322,6 +328,8 @@ For N GPUs each holding a vector of size D:
   - **Bandwidth utilization**: 2(N-1)/N ≈ 2 for large N (optimal!)
 
 ### Ring AllReduce Step-by-Step (4 GPUs)
+
+This pseudocode walks through the two phases of ring AllReduce with 4 GPUs. In the ReduceScatter phase, each GPU sends one chunk to its neighbor in a ring pattern over 3 steps, accumulating partial sums so that each GPU ends up owning the fully reduced version of one chunk. The AllGather phase then broadcasts each GPU's reduced chunk around the ring so every GPU has the complete result. This approach is bandwidth-optimal because each GPU only sends and receives `D/N` data per step.
 
 ```
 Phase 1: ReduceScatter (3 steps for 4 GPUs)
@@ -471,6 +479,8 @@ For P GPUs, message size M:
 
 ### Solution 1 (🟢)
 
+This solution enables peer access between GPU 0 and GPU 1, allocates a buffer on each GPU, and uses `cudaMemcpyPeer` to transfer data directly between them. It times the transfer with CUDA events and computes the achieved bandwidth in GB/s. This demonstrates the simplest form of GPUDirect P2P — the transfer travels over NVLink or PCIe depending on the hardware topology.
+
 ```cpp
 #include <cuda_runtime.h>
 #include <cstdio>
@@ -533,6 +543,8 @@ int main() {
 ```
 
 ### Solution 2 (🟢)
+
+This solution uses NCCL's `ncclBroadcast` to copy GPU 0's buffer (filled with the value 42.0) to all other GPUs. The broadcast is wrapped in `ncclGroupStart`/`ncclGroupEnd` so NCCL can optimize the grouped calls across all 4 GPUs. After synchronizing, each GPU verifies it received the correct value, confirming that the broadcast collective worked correctly.
 
 ```cpp
 #include <nccl.h>

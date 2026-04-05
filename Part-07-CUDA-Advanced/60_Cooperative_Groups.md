@@ -37,6 +37,8 @@ The key insight is that synchronization is defined by **group membership**, not 
 
 ### Partitioning Blocks into Sub-Groups
 
+This example demonstrates how to partition a thread block into 32-thread tiles (one per warp) and use `shfl_down` to perform a fast reduction entirely within warp registers — no shared memory needed for the warp-level phase. It showcases the core cooperative groups workflow: create a group object, then call collective operations on it. The three-phase approach (warp reduce → store to shared memory → final warp reduce) is a standard high-performance pattern for block-wide reductions.
+
 ```cpp
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
@@ -109,6 +111,8 @@ int main() {
 ```
 
 ### Sub-Warp Tiles for Fine-Grained Parallelism
+
+This code creates 16-thread tiles (half-warps) using `tiled_partition<16>`, allowing two independent reductions to run simultaneously within a single 32-thread warp. Each tile processes its own 16-element chunk and reduces it with `shfl_down`. This is useful when your data naturally decomposes into small groups — you get more parallelism by fitting multiple independent tasks inside one warp.
 
 ```cpp
 #include <cooperative_groups.h>
@@ -377,6 +381,8 @@ flowchart LR
 
 ### Coalesced Groups (Active Thread Masking)
 
+This kernel uses `cg::coalesced_threads()` to form a group from only the threads that are currently active after a conditional branch. It implements stream compaction: threads whose input value exceeds a threshold form a coalesced group, collectively allocate contiguous output slots with a single `atomicAdd`, and broadcast the base index via `shfl`. This avoids the wasted work of inactive threads participating in synchronization or atomic operations.
+
 ```cpp
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
@@ -457,6 +463,8 @@ int main() {
 
 ### Solution 1 (🟢)
 
+This solution creates a `thread_block_tile<32>` (one full warp) and performs a warp-level sum using `shfl_down` in a loop that halves the offset each iteration. Lane 0 of each warp writes the final sum to an output array. With all inputs set to 1.0, each warp of 32 threads should produce a sum of 32, making correctness easy to verify.
+
 ```cpp
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
@@ -506,6 +514,8 @@ int main() {
 ```
 
 ### Solution 3 (🟡)
+
+This solution implements a grid-wide inclusive prefix scan (Hillis-Steele algorithm) using `grid.sync()` to synchronize all threads across all blocks between each stride doubling. It must be launched with `cudaLaunchCooperativeKernel` so that all blocks are resident simultaneously, preventing deadlock at the grid barrier. The occupancy API is used to determine the maximum safe number of blocks.
 
 ```cpp
 #include <cooperative_groups.h>
