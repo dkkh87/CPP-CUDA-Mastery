@@ -111,6 +111,8 @@ flowchart LR
 
 ### 5.1 — Coalesced vs Strided Access Benchmark
 
+This program benchmarks coalesced (stride-1) vs strided (stride-32) global memory reads to show the dramatic bandwidth difference. The coalesced kernel has each thread read the element at its own index, so a warp's 32 reads fit in a single 128-byte transaction. The strided kernel scatters accesses across memory, forcing up to 32 separate transactions per warp. CUDA events measure average kernel time over 100 runs, and achieved bandwidth is computed from the data volume and elapsed time.
+
 ```cuda
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -198,6 +200,8 @@ int main() {
 
 ### 5.2 — SoA vs AoS Comparison
 
+This example compares Array-of-Structs (AoS) and Struct-of-Arrays (SoA) data layouts for a particle scaling operation. In AoS mode, each thread accesses fields within a `Particle` struct, causing stride-4 access across the warp. In SoA mode, separate arrays hold each field, so all threads in a warp read contiguous floats — perfect coalescing. Both kernels are benchmarked over 100 iterations with CUDA events to measure the bandwidth difference.
+
 ```cuda
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -271,6 +275,8 @@ int main() {
 ```
 
 ### 5.3 — Shared Memory Tiled Matrix Multiply
+
+This example implements both a naive and a shared-memory-tiled matrix multiply to show how tiling reduces global memory traffic. The naive kernel reads each element of A and B directly from global memory for every output element, resulting in redundant HBM reads. The tiled version loads TILE×TILE sub-blocks into fast shared memory and reuses each element TILE times, reducing global memory transactions by ~32×. Both versions are benchmarked and compared in GFLOPS.
 
 ```cuda
 #include <cstdio>
@@ -363,6 +369,8 @@ int main() {
 ```
 
 ### 5.4 — Register Pressure with `__launch_bounds__`
+
+This example shows how the `__launch_bounds__` compiler directive controls register allocation to improve occupancy. Two identical kernels with many local variables are defined — one unbounded and one annotated with `__launch_bounds__(256, 4)`, which tells the compiler to limit registers so at least 4 blocks can run per SM. The program prints the actual register count for each kernel and benchmarks both to show the performance impact of higher occupancy.
 
 ```cuda
 #include <cstdio>
@@ -504,6 +512,8 @@ cudaDestroyTextureObject(texObj);
 
 ### Theoretical vs Achieved Bandwidth
 
+These formulas show how to calculate peak theoretical memory bandwidth from hardware specs (clock rate, bus width, DDR factor) and compare it against the bandwidth your kernel actually achieves. The gap between theoretical and achieved bandwidth reveals how much performance is lost to uncoalesced access, cache misses, or other inefficiencies.
+
 ```
 Theoretical BW = memory_clock_GHz × bus_width_bytes × 2 (DDR)
 A100: 1.215 GHz × 5120b/8 × 2 = 2,039 GB/s | V100: 0.877 GHz × 4096b/8 × 2 = 898 GB/s
@@ -565,6 +575,8 @@ Modify the tiled matrix multiply (Section 5.3) to use **double buffering**: whil
 **Not coalesced.** Consecutive threads have consecutive `col` values, but the index `col * pitch + row` means adjacent threads access addresses separated by `pitch` elements (stride = `pitch`). This is column-major traversal of a row-major array — a classic uncoalesced pattern. Fix: swap the indexing to `row * pitch + col`.
 
 ### Solution 2
+
+This solution converts the `Vertex` AoS struct into separate SoA arrays (one per field) and rewrites the kernel to accept individual float pointers. Each thread accesses index `i` in contiguous arrays, achieving stride-1 coalesced access instead of the stride-4 pattern from the original AoS layout.
 
 ```cuda
 struct VerticesSoA {

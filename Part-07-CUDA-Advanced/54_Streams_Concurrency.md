@@ -58,6 +58,8 @@ are on different streams, they proceed in parallel with no software overhead.
 
 ### Error Checking Macro (used by all examples)
 
+This macro wraps every CUDA API call and checks the return code for errors, printing the file and line number if something fails. We use this pattern throughout the chapter so that asynchronous errors from stream operations are caught immediately instead of silently corrupting results.
+
 ```cuda
 #include <cstdio>
 #include <cstdlib>
@@ -74,6 +76,8 @@ are on different streams, they proceed in parallel with no software overhead.
 ```
 
 ### Example 1 — Basic Stream Creation & Async Memcpy
+
+This example creates a single non-default CUDA stream, then uses it to perform an asynchronous host-to-device copy, launch a kernel, and copy the results back — all without blocking the CPU until `cudaStreamSynchronize`. Pinned memory (`cudaMallocHost`) is used because `cudaMemcpyAsync` only runs truly asynchronously with page-locked host allocations.
 
 ```cuda
 #include <cstdio>
@@ -122,6 +126,8 @@ int main() {
 ```
 
 ### Example 2 — Multi-Stream Pipeline (3-Stage Overlap)
+
+This example splits a large array into 4 chunks and assigns each chunk to its own CUDA stream. Each stream independently performs H→D copy, kernel execution, and D→H copy. Because these operations go to separate GPU hardware engines, chunks overlap: while stream 0 computes, stream 1 can be copying data in. This demonstrates the classic multi-stream pipelining pattern that approaches N× speedup for N balanced stages.
 
 ```cuda
 #include <cstdio>
@@ -174,6 +180,8 @@ int main() {
 
 ### Example 3 — Event-Based Timing
 
+This example uses CUDA events to measure GPU execution time with sub-millisecond precision. Two events are recorded into the stream — one before and one after the full pipeline — and `cudaEventElapsedTime` computes the wall-clock duration. Unlike CPU-side timing, CUDA events measure time on the GPU clock, giving accurate results even when the CPU returns immediately from async launches.
+
 ```cuda
 #include <cstdio>
 #include <cstdlib>
@@ -220,6 +228,8 @@ int main() {
 ```
 
 ### Example 4 — Stream Priorities
+
+This example creates two streams with different priority levels using `cudaStreamCreateWithPriority`. A long-running kernel is launched on the low-priority stream, and a short kernel on the high-priority stream. CUDA events time each kernel independently. This demonstrates how stream priorities influence CTA scheduling order — the GPU scheduler prefers dispatching new thread blocks from higher-priority streams when SM slots open up, though it cannot preempt warps already running.
 
 ```cuda
 #include <cstdio>
@@ -388,6 +398,8 @@ order but cannot preempt running warps.
 ## 6. Solutions
 
 ### Solution 1
+
+This solution allocates 1 MB of pinned integer memory, copies it to the device on a non-default stream, runs a kernel that adds 1 to every element, copies the result back, and verifies correctness. CUDA events bracket the entire round trip to measure latency. It demonstrates the basic async copy + kernel + async copy pattern using a single explicit stream.
 
 ```cuda
 #include <cstdio>
