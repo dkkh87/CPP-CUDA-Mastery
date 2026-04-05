@@ -44,6 +44,8 @@ T double_it(T val) {
 
 ### The Concepts Solution
 
+Here is the same `double_it` function rewritten with C++20 concepts. Instead of the verbose `enable_if` machinery, we simply write `std::integral T` in the template parameter — the compiler immediately understands the constraint and produces a clear, one-line error if you pass the wrong type.
+
 ```cpp
 // C++20 Concepts — clean, readable, great error messages
 #include <concepts>
@@ -63,6 +65,8 @@ T double_it(T val) {
 ## 2. `requires` Clauses and `requires` Expressions
 
 ### `requires` Clause — Constrains a Template
+
+A `requires` clause attaches a constraint to a template so that the function only exists for types that satisfy the condition. This example shows two syntax styles: a trailing `requires` clause that restricts `reciprocal` to floating-point types, and the abbreviated `std::integral auto` syntax that constrains a parameter inline. If you pass the wrong type, the compiler immediately rejects the call with a clear message.
 
 ```cpp
 #include <iostream>
@@ -89,6 +93,8 @@ int main() {
 ```
 
 ### `requires` Expression — Tests Validity of Expressions
+
+A `requires` expression is a compile-time test that checks whether certain operations are valid for a given type. This example defines three custom concepts: `Printable` checks that `std::cout << t` compiles, `Hashable` checks that `std::hash` works and returns something convertible to `size_t` (a compound requirement), and `SignedNumber` embeds a nested predicate to verify the type is signed and supports basic arithmetic. The `static_assert` lines verify each concept at compile time.
 
 ```cpp
 #include <iostream>
@@ -126,6 +132,8 @@ static_assert(!SignedNumber<unsigned int>);
 ---
 
 ## 3. Writing Custom Concepts
+
+This example shows how to define your own concepts for domain-specific constraints. The `Container` concept requires a type to have `value_type`, `iterator`, `begin()`, `end()`, `size()`, and `empty()` — everything you'd expect from a standard container. The `Numeric` concept requires arithmetic operators. Functions constrained with these concepts will only accept types that truly support the operations used inside.
 
 ```cpp
 #include <concepts>
@@ -201,6 +209,8 @@ C++20 provides concepts in `<concepts>` and `<iterator>`:
 | `<iterator>` | `std::random_access_iterator` | Supports O(1) indexing |
 | `<ranges>` | `std::ranges::range` | Has begin() and end() |
 
+This code demonstrates using standard library concepts in practice. The `my_sort` function combines `std::ranges::range` with `std::totally_ordered` to ensure the range's elements are sortable. The `apply_filter` function uses `std::predicate` to guarantee the callback returns a `bool`. These constraints catch type mismatches at the call site rather than deep inside the implementation.
+
 ```cpp
 #include <concepts>
 #include <iostream>
@@ -235,6 +245,8 @@ int main() {
 ---
 
 ## 5. Constraining Class Templates
+
+Concepts can constrain entire class templates and even individual member functions within them. This `Matrix` class only allows arithmetic types (int, float, double, etc.) via a `requires` clause on the class. The `invert()` method adds a further constraint — it only exists when `T` is a floating-point type, since matrix inversion doesn't make sense for integers. This means `Matrix<int>` compiles fine but calling `invert()` on it produces a clear error.
 
 ```cpp
 #include <concepts>
@@ -326,6 +338,8 @@ The compiler knows `Integer` **subsumes** `Number` because Integer's constraint 
 
 ## 7. Concepts vs SFINAE — Side-by-Side
 
+This side-by-side comparison shows the same `to_string` overloads written with C++17 SFINAE and C++20 concepts. The SFINAE version requires verbose `enable_if_t` boilerplate in the template parameters, while the concepts version uses concise `std::integral auto` and `std::floating_point auto` syntax. The concepts approach is more readable, compiles faster, and produces much clearer error messages.
+
 ```cpp
 // ============ SFINAE (C++17) ============
 #include <type_traits>
@@ -366,6 +380,8 @@ auto to_string_concept(std::floating_point auto val) {
 ---
 
 ## 8. Real-World: Constraining a Container Interface
+
+This example builds a complete `FlatBuffer` container class constrained by a custom `Storable` concept (requiring types to be copyable and default-initializable). It demonstrates real-world usage: the container manages its own dynamic memory with a growth strategy, exposes iterators so it works with `std::sort`, and a `print_all` function uses an inline `requires` expression to accept any type with the right interface. This pattern is how production libraries combine concepts with data structures.
 
 ```cpp
 #include <concepts>
@@ -497,6 +513,8 @@ flowchart TD
 
 ### Solution 1 — `Addable` Concept
 
+This solution defines a simple `Addable` concept that checks whether two values of type `T` can be added together with the result convertible back to `T`. The `add` function is then constrained with this concept, so it works with any addable type — integers, floats, strings, or any custom type with `operator+`.
+
 ```cpp
 #include <concepts>
 #include <iostream>
@@ -517,6 +535,8 @@ int main() {
 ```
 
 ### Solution 4 — Overloaded `stringify()`
+
+This solution uses concepts to create two overloads of `stringify()` that behave differently based on the type. The `std::integral` overload formats integers as hexadecimal strings (e.g., 255 → "0xff"), while the `std::floating_point` overload formats decimals with fixed precision. The compiler automatically selects the correct overload based on which concept the argument satisfies — no SFINAE needed.
 
 ```cpp
 #include <concepts>

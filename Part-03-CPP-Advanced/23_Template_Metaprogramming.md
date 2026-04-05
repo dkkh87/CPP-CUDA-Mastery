@@ -268,6 +268,8 @@ int main() {
 
 ### Factorial & Fibonacci
 
+This code uses `constexpr` functions to compute factorial and Fibonacci values entirely at compile time, avoiding any runtime cost. It also builds a compile-time lookup table using `std::index_sequence`, so all 20 Fibonacci numbers are baked into the binary before the program even runs. The `static_assert` lines prove the results are computed at compile time — if they weren't, the code wouldn't compile.
+
 ```cpp
 #include <iostream>
 #include <array>
@@ -456,6 +458,8 @@ flowchart TD
 
 ### Solution 1 — `max_of` with fold expression
 
+This solution shows two ways to find the maximum of a variadic argument list. The first approach uses recursive variadic templates — it peels off one argument at a time and compares it against the maximum of the remaining arguments. The second approach uses `std::max` with an initializer list, which is more concise. Both demonstrate how variadic templates let you write functions that accept any number of arguments.
+
 ```cpp
 #include <iostream>
 
@@ -482,6 +486,8 @@ int main() {
 ```
 
 ### Solution 3 — CRTP `Printable` Mixin
+
+This solution demonstrates CRTP as a mixin: the `Printable` base class provides a `print()` method that calls the derived class's `format()` method via `static_cast`. The `Point` class inherits from `Printable<Point>` and implements `format()` to return its coordinates as a string. This gives you reusable behavior without virtual functions — the compiler resolves the call at compile time.
 
 ```cpp
 #include <iostream>
