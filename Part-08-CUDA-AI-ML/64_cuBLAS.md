@@ -488,6 +488,8 @@ flowchart TB
 
 ### Math Mode
 
+The math mode controls whether cuBLAS uses Tensor Cores for FP32 operations. TF32 mode on Ampere+ GPUs trades a small amount of precision for up to 8× faster throughput, while pedantic mode forces strict IEEE FP32 for maximum accuracy.
+
 ```cpp
 // Enable TF32 on Ampere+ (faster FP32 with slightly reduced precision)
 cublasSetMathMode(handle, CUBLAS_TF32_TENSOR_OP_MATH);

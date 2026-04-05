@@ -335,6 +335,8 @@ graph TB
 
 ### Coalesced vs Uncoalesced Code
 
+These three kernels demonstrate coalesced vs. uncoalesced global memory access patterns. The first kernel achieves coalescing because consecutive threads access consecutive addresses (stride-1). The second kernel accesses a column of a row-major matrix, scattering addresses across cache lines. The third kernel fixes this by mapping threads to consecutive columns instead.
+
 ```cuda
 // ✅ COALESCED: Thread i accesses element i (stride-1)
 // Threads 0-31 access addresses 0, 4, 8, ..., 124 → ONE 128-byte transaction
@@ -369,6 +371,8 @@ __global__ void coalescedMatrix(float* matrix, int rows, int cols) {
 ```
 
 ### Structure of Arrays (SoA) vs Array of Structures (AoS)
+
+This comparison shows why data layout matters for GPU performance. With Array of Structures (AoS), consecutive threads access fields separated by the struct stride (28 bytes for a 7-float particle), causing uncoalesced reads. With Structure of Arrays (SoA), each field is stored in its own contiguous array, so consecutive threads access consecutive 4-byte floats — perfectly coalesced.
 
 ```cuda
 // ❌ AoS — threads in a warp access non-consecutive memory

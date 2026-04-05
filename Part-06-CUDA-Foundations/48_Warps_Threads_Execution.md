@@ -33,6 +33,8 @@ Each SM has 4 warp schedulers (on Hopper). Each cycle, each scheduler picks one 
 
 ## 3. Warp Formation and Thread Organization
 
+This diagram shows how a block of 256 threads is divided into 8 warps of 32 threads each. For 2D blocks, threads are linearized in row-major order (`y * blockDim.x + x`) before being grouped into warps.
+
 ```
 Block of 256 threads:
 ┌─────────────────────────────────────────────────────────────┐
@@ -99,6 +101,8 @@ graph TB
 
 ### How Latency Is Hidden
 
+This timeline illustrates how the GPU hides memory latency by rapidly switching between warps. While one warp waits hundreds of cycles for a memory load, the scheduler issues instructions from other ready warps, keeping the execution units busy at all times.
+
 ```
 Timeline (simplified, 4 warps on 1 scheduler):
 
@@ -153,6 +157,8 @@ graph TB
 
 ### Divergence Examples
 
+These three kernels show the spectrum from worst to best: (1) branching on even/odd `threadIdx.x` causes 50% divergence in every warp, (2) branching on warp ID ensures all threads in a warp take the same path, and (3) using a branchless ternary lets the compiler use predication to avoid divergence entirely.
+
 ```cuda
 // ❌ BAD: 50% divergence within every warp
 __global__ void divergent(float* data, int n) {
@@ -193,6 +199,8 @@ __global__ void branchless(float* data, int mask, int n) {
 ```
 
 ### When Divergence Doesn't Matter
+
+A bounds check like `if (idx < N)` causes divergence only in the very last warp of the grid where some threads are out of range. This is perfectly acceptable because only one warp is affected, and the performance impact is negligible.
 
 ```cuda
 // This divergence is FINE — only the last warp has inactive threads
@@ -272,6 +280,8 @@ __global__ void warpPrimitives(float* data, float* output, int n) {
 ```
 
 ### Warp Reduction Visualization
+
+This diagram shows how a warp-level reduction sums 32 values in just 5 steps using `__shfl_down_sync`. At each step, each lane adds the value from a lane at a decreasing offset (16, 8, 4, 2, 1), halving the number of active contributors until lane 0 holds the final sum.
 
 ```
 Initial:  [v0  v1  v2  v3  v4  v5  v6  v7  ... v31]
@@ -404,6 +414,8 @@ The goal is **sufficient occupancy** to hide memory latency, not maximum occupan
 
 ### Why Multiples of 32
 
+This comparison shows why block sizes should be multiples of 32. A block of 100 threads creates 4 warps, but the last warp only uses 4 of its 32 lanes — wasting 28 lanes. A block of 128 threads uses all 4 warps at full capacity with no wasted resources.
+
 ```
 Block size = 100 threads:
   Warp 0: 32 threads ✓ (full)
@@ -471,6 +483,8 @@ RESULT: min(8, 6, 32, 32) = 6 blocks per SM
 ```
 
 ### Optimization Options
+
+These three strategies address low occupancy caused by high register usage. Option A caps register count globally (risking spills to slow local memory). Option B uses smaller blocks for finer scheduling granularity. Option C uses `__launch_bounds__` to give the compiler a per-kernel hint, letting it automatically manage register pressure.
 
 ```cuda
 // Option A: Reduce register count with compiler flag
@@ -637,6 +651,8 @@ int main() {
 ---
 
 ## 12. Active vs Resident Warps
+
+This timeline shows the distinction between resident and active warps on an SM. All 48 warps are resident — their register state lives permanently on the SM with no context-switch overhead. However, only 4 warps (one per scheduler) are actively executing instructions at any given cycle. The rest are stalled on memory and instantly ready when a slot opens.
 
 ```
 SM Timeline (simplified):

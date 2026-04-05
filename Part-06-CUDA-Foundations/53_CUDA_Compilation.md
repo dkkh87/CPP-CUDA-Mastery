@@ -126,6 +126,8 @@ $L__BB0_2:
 
 ### Generating PTX
 
+You can ask `nvcc` to output the intermediate PTX representation instead of a final binary. This is useful for inspecting what the compiler generated or for distributing forward-compatible code that the driver can JIT-compile on any future GPU.
+
 ```bash
 # Generate PTX (human-readable) — no SASS
 nvcc --ptx -arch=compute_80 -o kernel.ptx kernel.cu
@@ -159,6 +161,8 @@ SASS (Shader ASSembly) is the **actual machine code** that executes on the GPU's
 
 ### Viewing SASS
 
+Use `cuobjdump` or `nvdisasm` to disassemble a compiled CUDA binary and inspect the actual GPU machine instructions. This lets you see exactly what the hardware will execute, including register usage and memory access patterns.
+
 ```bash
 # Disassemble a compiled binary
 cuobjdump --dump-sass ./my_app
@@ -172,6 +176,8 @@ nvcc -arch=sm_80 --keep -o app kernel.cu
 ```
 
 ### SASS Example (Ampere sm_80)
+
+Below is the actual SASS machine code generated for a simple vector addition (`c[i] = a[i] + b[i]`). Each instruction maps directly to a hardware operation — two global memory loads, one floating-point add, and one global memory store.
 
 ```
 // SASS for c[i] = a[i] + b[i]
@@ -190,6 +196,8 @@ nvcc -arch=sm_80 --keep -o app kernel.cu
 A fat binary embeds code for **multiple GPU architectures**, allowing one executable to run on different GPUs.
 
 ### The `--gencode` Flag
+
+The `--gencode` flag lets you embed SASS code for multiple GPU architectures into a single executable (a "fat binary"). Each `--gencode` entry specifies a virtual architecture for PTX generation and a real architecture for SASS generation, so your program runs natively on all listed GPUs.
 
 ```bash
 # Build for Volta, Turing, Ampere, and Hopper
@@ -227,6 +235,8 @@ graph TD
 ```
 
 ### Practical Guideline
+
+For most projects, you only need a few `--gencode` entries to cover the GPU generations you care about. Including a PTX entry for the newest architecture ensures forward compatibility — the driver can JIT-compile that PTX for any future GPU.
 
 ```bash
 # Minimum for broad compatibility (covers V100 through H100 + future)
@@ -303,6 +313,8 @@ The `__CUDA_ARCH__` macro lets you write different code paths for different GPU 
 
 ### Virtual vs Real Architecture
 
+The `-arch` flag serves double duty. When targeting a virtual architecture (`compute_XX`), `nvcc` emits PTX that is forward-compatible. When targeting a real architecture (`sm_XX`), it emits final SASS machine code for that specific GPU. The table below the snippet summarizes how different flag combinations affect compatibility and performance.
+
 ```
 -arch=compute_XX  → Virtual architecture (PTX generation target)
 -arch=sm_XX       → Real architecture (SASS generation target)
@@ -316,6 +328,8 @@ The `__CUDA_ARCH__` macro lets you write different code paths for different GPU 
 | `--gencode arch=compute_80,code="sm_80,compute_80"` | SASS + PTX | Yes | On newer GPUs |
 
 ### Shorthand
+
+Instead of writing out the full `--gencode` syntax, you can use the shorter `-arch=sm_XX` flag. This is equivalent to generating both SASS for that architecture and PTX for forward compatibility — a convenient default for single-target builds.
 
 ```bash
 # Equivalent to: --gencode arch=compute_80,code="sm_80,compute_80"
@@ -349,14 +363,17 @@ __global__ void kernel(float* data) {
 }
 ```
 
+Without separate compilation, compiling multiple `.cu` files individually and linking them will fail when one file references a `__device__` function defined in another — the linker cannot resolve cross-file device symbols.
+
 ```bash
-# This FAILS without separate compilation:
 nvcc -c file1.cu -o file1.o
 nvcc -c file2.cu -o file2.o
 nvcc file1.o file2.o -o app  # Link error: helper not found!
 ```
 
 ### The Solution: Relocatable Device Code (RDC)
+
+The `-dc` flag tells `nvcc` to compile each `.cu` file into a relocatable device object that can reference `__device__` functions defined in other files. A separate device-link step then resolves all cross-file device references before producing the final executable.
 
 ```bash
 # Enable separate compilation with -dc (device compile)
@@ -368,6 +385,8 @@ nvcc -arch=sm_80 file1.o file2.o -o app
 ```
 
 ### CMake Integration
+
+CMake 3.18+ has native CUDA support. Setting `CMAKE_CUDA_SEPARABLE_COMPILATION ON` enables relocatable device code across all targets, and `CMAKE_CUDA_ARCHITECTURES` controls which GPU architectures to build for — no manual `--gencode` flags needed.
 
 ```cmake
 cmake_minimum_required(VERSION 3.18)
@@ -417,6 +436,8 @@ target_compile_options(myapp PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambd
 
 ### `--extended-lambda` for Device Lambdas
 
+The `--extended-lambda` flag allows you to use C++ lambdas annotated with `__device__` inside CUDA kernels. This enables a more functional programming style on the GPU, such as passing transformation functions inline without writing separate `__device__` helper functions.
+
 ```cuda
 // Requires: nvcc --extended-lambda
 #include <cstdio>
@@ -441,6 +462,8 @@ __global__ void applyLambda(float* data, int N) {
 | C++17 | ✅ Mostly | `-std=c++17` — structured bindings, `if constexpr`, fold expressions |
 | C++20 | ⚠️ Partial | `-std=c++20` — concepts partial, modules unsupported |
 | C++23 | ❌ Experimental | Very limited |
+
+Use the `-std=` flag to select which C++ standard `nvcc` compiles against, and `-ccbin` to specify a particular host compiler version. Matching the host compiler to a supported version avoids cryptic template errors.
 
 ```bash
 # Compile with C++17
@@ -467,6 +490,8 @@ Mismatched host compiler versions cause cryptic template errors. Always check th
 When a fat binary contains PTX but no matching SASS for the target GPU, the CUDA driver **JIT compiles** PTX to SASS at first load.
 
 ### JIT Compilation Flow
+
+This diagram shows what happens at runtime when your application launches on a GPU that doesn't have pre-compiled SASS in the fat binary. The driver falls back to PTX, compiles it on-the-fly for the target GPU, and caches the result so subsequent runs are instant.
 
 ```
 Application starts on GPU with sm_90 (Hopper)

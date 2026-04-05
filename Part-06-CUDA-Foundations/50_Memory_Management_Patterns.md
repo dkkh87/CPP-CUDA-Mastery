@@ -108,6 +108,8 @@ Page-locked (pinned) memory **cannot be swapped out** by the OS. This enables th
 
 ### Why Pinned Memory Is Faster
 
+This diagram compares the two data transfer paths. Pageable memory requires the OS to copy data to a temporary pinned staging buffer before the GPU's DMA engine can access it — adding CPU overhead and roughly halving throughput. Pinned memory skips that extra copy, enabling direct DMA at full PCIe bandwidth.
+
 ```
 PAGEABLE transfer path:
   Host pageable buffer → OS pins to staging buffer → DMA to GPU
@@ -172,6 +174,8 @@ int main() {
 ```
 
 ### `cudaHostAlloc` Flags
+
+`cudaHostAlloc` supports several flags that control how pinned memory behaves. `Portable` makes the allocation visible across multiple GPU contexts, `Mapped` creates a device-accessible pointer for zero-copy access, and `WriteCombined` optimizes for CPU-write/GPU-read scenarios by bypassing the CPU cache.
 
 ```cuda
 float* h_ptr;

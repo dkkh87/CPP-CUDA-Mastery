@@ -49,6 +49,8 @@ unsigned mask = 0x0000FFFF;  // Only lanes 0-15 participate
 
 ### `__shfl_sync` — Direct Lane Access
 
+`__shfl_sync` lets any thread in a warp read a register value directly from any other lane by its lane ID — no shared memory needed. The `mask` parameter specifies which threads participate and must include the calling thread.
+
 ```cuda
 // Read the value of variable `val` from lane `srcLane`
 int result = __shfl_sync(mask, val, srcLane);
@@ -76,6 +78,8 @@ __global__ void shflDemo() {
 
 ### `__shfl_up_sync` — Shift Up
 
+Each thread reads the value from a lane `delta` positions below it (i.e., lane `laneId - delta`). Lanes near the bottom of the warp (0 to `delta-1`) clamp to their own value since there is no source below them.
+
 ```cuda
 // Read from lane (laneId - delta), clamped to 0
 int result = __shfl_up_sync(mask, val, delta);
@@ -85,6 +89,8 @@ Lanes 0 to `delta-1` get their own value (no source above them). Used for **pref
 
 ### `__shfl_down_sync` — Shift Down
 
+Each thread reads the value from a lane `delta` positions above it (i.e., lane `laneId + delta`). Lanes near the top of the warp clamp to their own value. This is the workhorse for warp-level reductions — summing all 32 values down to lane 0.
+
 ```cuda
 // Read from lane (laneId + delta), clamped to 31
 int result = __shfl_down_sync(mask, val, delta);
@@ -93,6 +99,8 @@ int result = __shfl_down_sync(mask, val, delta);
 Lanes `(32-delta)` to 31 get their own value. Used for **reductions** (sum the warp).
 
 ### `__shfl_xor_sync` — Butterfly Exchange
+
+Each thread exchanges data with a partner lane determined by XORing its own lane ID with `laneMask`. For example, with `laneMask=1`, lane 0 swaps with lane 1, lane 2 swaps with lane 3, and so on. This pattern is used for butterfly reductions and all-reduce operations.
 
 ```cuda
 // Read from lane (laneId ^ laneMask)
@@ -228,6 +236,8 @@ __device__ float warpAllReduceSum(float val) {
 
 ### `__ballot_sync` — Collect Predicate Bits
 
+`__ballot_sync` collects a boolean predicate from each lane and packs the results into a single 32-bit integer, where bit `i` is set if lane `i`'s predicate was true. You can then use `__popc()` (population count) to count how many threads satisfied the condition.
+
 ```cuda
 unsigned int ballot = __ballot_sync(0xFFFFFFFF, predicate);
 // ballot: bit i is 1 if lane i's predicate is true
@@ -249,6 +259,8 @@ __global__ void countPositive(const float* data, int* count, int N) {
 ```
 
 ### `__any_sync` and `__all_sync`
+
+These vote functions quickly check a condition across an entire warp. `__any_sync` returns true if at least one thread's predicate is nonzero, while `__all_sync` returns true only if every thread's predicate is nonzero. Both are single-cycle operations.
 
 ```cuda
 // Returns non-zero if ANY participating thread has predicate != 0
@@ -298,6 +310,8 @@ __device__ void efficientPath(float* data, int N) {
 ---
 
 ## 8. Warp Match Functions (Volta+)
+
+Available on Volta and newer GPUs, `__match_any_sync` returns a bitmask identifying which lanes hold the same value as the calling thread. `__match_all_sync` checks whether all lanes share the same value. These are useful for grouping threads by data value without explicit comparisons.
 
 ```cuda
 // Returns a mask of lanes that have the same value as the caller

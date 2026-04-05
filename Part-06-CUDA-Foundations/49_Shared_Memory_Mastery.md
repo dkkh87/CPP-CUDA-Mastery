@@ -49,6 +49,8 @@ Static shared memory is allocated per block when the kernel launches. The total 
 
 ### Dynamic Allocation
 
+When the shared memory size is not known at compile time, you declare it with `extern __shared__` and specify the byte count as the third argument in the kernel launch `<<<blocks, threads, smemBytes>>>`. This lets you adjust the allocation at runtime based on input size.
+
 ```cuda
 extern __shared__ float smem[];   // Size determined at launch
 
@@ -90,6 +92,8 @@ Shared memory is organized into **32 banks**, each 4 bytes wide. Successive 4-by
 
 ### Bank Layout
 
+Shared memory addresses map to banks in round-robin order: bytes 0–3 go to bank 0, bytes 4–7 to bank 1, and so on through bank 31, then the pattern repeats starting at byte 128. When two threads in the same warp access the same bank (but different addresses), they must be serialized.
+
 ```
 Address (bytes):  0    4    8    12  ...  124
 Bank ID:          0    1    2    3   ...  31
@@ -126,12 +130,16 @@ graph TD
 
 **No conflict — stride 1 (sequential):**
 
+With stride-1 access, each thread reads from a different bank (thread 0 → bank 0, thread 1 → bank 1, etc.), so all 32 accesses happen simultaneously with zero bank conflicts.
+
 ```cuda
 __shared__ float s[1024];
 float val = s[threadIdx.x];  // Thread i reads bank i → 0 conflicts
 ```
 
 **2-way conflict — stride 2:**
+
+With stride-2 access, every two threads hit the same bank (e.g., threads 0 and 16 both access bank 0), resulting in 2-way conflicts that halve the effective shared memory bandwidth.
 
 ```cuda
 float val = s[threadIdx.x * 2];
@@ -141,12 +149,16 @@ float val = s[threadIdx.x * 2];
 
 **32-way conflict — stride 32:**
 
+With stride-32 access, every 4-byte word lands on the same bank (bank 0 in this case). All 32 threads serialize on a single bank, making this access pattern 32× slower than an optimal conflict-free pattern.
+
 ```cuda
 float val = s[threadIdx.x * 32];
 // ALL threads hit bank 0! Fully serialized → 32× slower
 ```
 
 **Broadcast — all read same address:**
+
+When all threads read the exact same address, the hardware broadcasts the value to all threads in a single operation — no conflict. This is a special case: same address is free, but different addresses in the same bank cause conflicts.
 
 ```cuda
 float val = s[0];  // All threads read exact same address → broadcast, FREE
@@ -176,6 +188,8 @@ float val = tile[threadIdx.x][col];  // Now stride-33 → spreads across banks
 
 ### When Required
 
+You must call `__syncthreads()` whenever threads in a block cooperatively access shared memory — specifically, between a write phase and a subsequent read phase. These two examples show the pattern: sync after a cooperative load before reading neighbors, and sync after reads before overwriting.
+
 ```cuda
 __shared__ float s[256];
 
@@ -191,6 +205,8 @@ s[tid] = newValue;
 ```
 
 ### The Conditional Pitfall — Undefined Behavior
+
+Placing `__syncthreads()` inside a conditional that not all threads agree on causes deadlock or memory corruption. Some threads reach the barrier and wait forever while others skip it entirely. The barrier must be reached by all threads in the block, or by none.
 
 ```cuda
 // ⚠️ UNDEFINED BEHAVIOR — never do this!

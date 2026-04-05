@@ -562,12 +562,18 @@ fused_bias_gelu_kernel<<<...>>>(input, bias, output, N); // RIGHT: registers onl
 ```
 
 ### ❌ Mistake 4: Ignoring numerical stability
+
+Computing softmax with raw `expf(logits)` can overflow for large logit values. The standard fix is to subtract the maximum logit before exponentiation, which produces the same probabilities without numerical overflow.
+
 ```cuda
 float p = expf(logits[c]) / sum;                  // WRONG: overflows
 float p = expf(logits[c] - max_val) / sum_shifted; // RIGHT: subtract max
 ```
 
 ### ❌ Mistake 5: Forgetting dropout scaling
+
+When applying dropout, you must scale the surviving activations by `1/(1-p)` (inverted dropout) so the expected value remains unchanged during training. Without this scaling, the network sees systematically smaller activations during training than at inference.
+
 ```cuda
 float mask = (r > p) ? 1.0f : 0.0f;               // WRONG: E[y] ≠ E[x]
 float mask = (r > p) ? 1.0f/(1.0f-p) : 0.0f;      // RIGHT: inverted dropout

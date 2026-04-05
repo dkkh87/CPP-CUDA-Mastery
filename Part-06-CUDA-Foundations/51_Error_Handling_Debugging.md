@@ -20,6 +20,8 @@ CUDA kernels execute **asynchronously** on a separate device. When a kernel cras
 
 ### Every CUDA Runtime API Returns `cudaError_t`
 
+Every CUDA runtime function returns an error code that you should check. This snippet shows the basic pattern: call the function, compare the result to `cudaSuccess`, and print a human-readable error message if it failed.
+
 ```cuda
 cudaError_t err = cudaMalloc(&d_ptr, bytes);
 if (err != cudaSuccess) {
@@ -90,6 +92,8 @@ Every production CUDA application uses a macro to wrap API calls:
 
 ### Usage Pattern
 
+Here is a complete example showing how the `CUDA_CHECK` and `CUDA_CHECK_LAST` macros are used in practice. Every allocation, kernel launch, synchronization, and memory transfer is wrapped in an error check so failures are caught immediately with a clear file-and-line error message.
+
 ```cuda
 int main() {
     float *d_data;
@@ -126,6 +130,8 @@ int main() {
 | `synccheck` | Invalid `__syncthreads()` usage, barrier divergence | `compute-sanitizer --tool synccheck ./myapp` |
 
 ### Example: Detecting Out-of-Bounds Access
+
+This example demonstrates a kernel that writes beyond its allocated buffer — a common bug when the number of launched threads exceeds the array size. Running with `compute-sanitizer --tool memcheck` will report the exact invalid memory access.
 
 ```cuda
 // BUG: kernel accesses out of bounds
@@ -278,6 +284,8 @@ ncu --kernel-name matmulTiled --launch-count 1 ./my_app
 
 ### Bug 1: Race Condition in Shared Memory
 
+When multiple threads in a block write to shared memory and then read each other's values, you must insert a `__syncthreads()` barrier between the write and read phases. Without it, a thread may read stale data that hasn't been written yet.
+
 ```cuda
 // ❌ BUG: Missing sync between write and read
 __shared__ float smem[256];
@@ -291,6 +299,8 @@ float neighbor = smem[tid ^ 1];   // Safe read
 ```
 
 ### Bug 2: Out-of-Bounds Global Memory Access
+
+Launching more threads than array elements without a bounds check causes threads to write past the end of the buffer, corrupting memory or crashing. The fix is a simple `if (idx < N)` guard before every array access.
 
 ```cuda
 // ❌ BUG: No bounds check
@@ -309,6 +319,8 @@ __global__ void kernel(float* data, int N) {
 
 ### Bug 3: Kernel Launch Configuration Errors
 
+Requesting more threads per block than the hardware supports (usually 1024 max) causes a silent launch failure — the kernel simply doesn't run, and no error is reported unless you explicitly check with `cudaGetLastError()`. Always validate your launch dimensions.
+
 ```cuda
 // ❌ BUG: Block size exceeds device maximum (typically 1024)
 kernel<<<1, 2048>>>(data, N);  // Silent failure! Kernel doesn't run.
@@ -319,6 +331,8 @@ CUDA_CHECK_LAST();
 ```
 
 ### Bug 4: Memory Leaks
+
+If your program returns early (e.g., on an error condition) without calling `cudaFree`, GPU memory is leaked until the process exits. Use RAII wrappers or a `goto cleanup` pattern to ensure every allocation is paired with a free on all code paths.
 
 ```cuda
 // ❌ BUG: Early return without cudaFree
@@ -349,6 +363,8 @@ cleanup:
 ```
 
 ### Bug 5: Using Host Pointer on Device
+
+Passing a `malloc`-allocated host pointer to a GPU kernel causes a segfault or crash because the GPU cannot access CPU-side memory. You must allocate a device buffer with `cudaMalloc`, copy data to it, and pass the device pointer to the kernel.
 
 ```cuda
 // ❌ BUG: Passing host pointer to kernel
