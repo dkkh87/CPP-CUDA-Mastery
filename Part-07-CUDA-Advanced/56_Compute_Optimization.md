@@ -2,8 +2,6 @@
 
 `#cuda` `#compute` `#optimization` `#occupancy` `#ILP` `#roofline`
 
----
-
 ## Theory — Maximizing Compute Throughput
 
 GPU compute optimization is the art of keeping every functional unit busy every cycle.
@@ -32,10 +30,7 @@ caching, coalescing, and data reuse.
 | Max registers/thread   | 255         |
 
 If a kernel uses 64 registers per thread and 256 threads per block, one block consumes
-64 × 256 = 16384 registers. The SM can host 65536 / 16384 = 4 blocks = 1024 threads,
-giving 50% occupancy (1024 / 2048).
-
----
+16384 registers. The SM can host 4 blocks = 1024 threads → 50% occupancy.
 
 ## What / Why / How
 
@@ -58,8 +53,6 @@ occupancy, ILP, fused instructions, and eliminating branch divergence.
 4. **Minimize divergence** — restructure so warp threads take the same path.
 5. **Use fast math** — `__fdividef`, `__expf`, `--use_fast_math`.
 6. **Maximize FMA** — write `a * b + c` so the compiler can fuse.
-
----
 
 ## Code Example 1 — Occupancy Calculator
 
@@ -127,8 +120,6 @@ int main() {
     return 0;
 }
 ```
-
----
 
 ## Code Example 2 — ILP: 1 Element vs 4 Elements per Thread
 
@@ -221,8 +212,6 @@ int main() {
     return 0;
 }
 ```
-
----
 
 ## Code Example 3 — Branch Divergence: Bad vs Good
 
@@ -317,8 +306,6 @@ int main() {
 }
 ```
 
----
-
 ## Code Example 4 — Loop Unrolling Comparison
 
 ```cuda
@@ -411,8 +398,6 @@ int main() {
 }
 ```
 
----
-
 ## Mermaid Diagram 1 — Roofline Model with Optimization Pathways
 
 ```mermaid
@@ -479,31 +464,24 @@ graph TD
     SM --> Pipeline
 ```
 
----
-
 ## Exercises
 
 ### 🟢 Exercise 1 — Occupancy Query
-Write a program that launches a simple vector-add kernel, queries its occupancy using
-`cudaOccupancyMaxActiveBlocksPerMultiprocessor`, and prints the percentage occupancy
-for block sizes 64, 128, 256, and 512.
+Write a program that queries `cudaOccupancyMaxActiveBlocksPerMultiprocessor` for a
+vector-add kernel and prints occupancy for block sizes 64, 128, 256, and 512.
 
 ### 🟡 Exercise 2 — ILP Exploration
-Modify the ILP example to test ILP-2 and ILP-8 variants. Plot (or print) the bandwidth
-achieved by each. Determine at what ILP level returns diminish on your GPU.
+Extend the ILP example to test ILP-2 and ILP-8 variants. Print bandwidth achieved by
+each and determine the point of diminishing returns on your GPU.
 
 ### 🟡 Exercise 3 — Divergence Profiling
-Use `ncu` (Nsight Compute) to profile the divergent vs uniform kernels from Code
-Example 3. Report the `smsp__thread_inst_executed_pred_on` metric and compare the
-ratio of predicated instructions between the two versions.
+Profile the divergent vs uniform kernels from Code Example 3 with `ncu`. Compare the
+`smsp__thread_inst_executed_pred_on` metric between versions.
 
 ### 🔴 Exercise 4 — Roofline Classification
-Write a kernel that performs a matrix-vector multiply (y = A·x). Calculate its
-arithmetic intensity analytically (FLOPs / bytes loaded). Then measure achieved
-FLOP/s and bandwidth. Determine whether the kernel is compute-bound or memory-bound
-on your GPU and propose the appropriate optimization strategy.
-
----
+Implement a matrix-vector multiply kernel. Calculate its arithmetic intensity
+analytically, measure achieved FLOP/s and bandwidth, determine whether it is
+compute-bound or memory-bound, and propose the right optimization strategy.
 
 ## Solutions
 
@@ -565,8 +543,6 @@ Arithmetic intensity ≈ 0.5 FLOP/byte — firmly **memory-bound** (ridge point 
 10–50 FLOP/byte). Optimize memory access patterns: coalesced loads, shared-memory
 caching of x tiles, FP16 to double effective bandwidth.
 
----
-
 ## Quiz
 
 **Q1.** What does occupancy measure?
@@ -617,8 +593,6 @@ caching of x tiles, FP16 to double effective bandwidth.
 - C) The amount of shared memory available
 - D) The register count of a kernel
 
----
-
 ## Key Takeaways
 
 - **Occupancy is necessary but not sufficient** — aim for ≥50% then focus on ILP.
@@ -632,8 +606,6 @@ caching of x tiles, FP16 to double effective bandwidth.
 - **Use the occupancy API** — removes guesswork from block size selection.
 - **Fast math intrinsics** (`__fdividef`, `__expf`) trade accuracy for 2-5× speedup.
 
----
-
 ## Chapter Summary
 
 Compute optimization on the GPU begins with understanding where your kernel sits on
@@ -645,8 +617,6 @@ intrinsics. The CUDA occupancy API and Nsight Compute make the analysis data-dri
 Mastering compute optimization separates a kernel that merely runs on a GPU from one
 that truly exploits the hardware.
 
----
-
 ## Real-World Insight — AI/ML Applications
 
 | Technique | AI/ML Application |
@@ -657,8 +627,6 @@ that truly exploits the hardware.
 | **Branch divergence** | Sparse attention (Longformer, BigBird) needs careful masking to avoid per-thread divergence. |
 | **FMA / fast math** | Mixed-precision training uses FP16 FMA on tensor cores; activations (GELU, SiLU) use `__expf` for 3× inference speedup. |
 | **Roofline analysis** | PyTorch/TensorRT use roofline to decide operator fusion — fusing two memory-bound kernels raises arithmetic intensity above the ridge point. |
-
----
 
 ## Common Mistakes
 
@@ -681,8 +649,6 @@ that truly exploits the hardware.
 7. **Not profiling first** — compute-optimizing a memory-bound kernel wastes effort.
 
 8. **Block sizes not multiples of 32** — wastes threads in the last warp.
-
----
 
 ## Interview Questions
 
