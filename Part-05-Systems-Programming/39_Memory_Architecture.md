@@ -3,7 +3,6 @@
 **Tags:** `memory-hierarchy`, `virtual-memory`, `cache`, `NUMA`, `false-sharing`, `mmap`, `systems-programming`
 
 ---
-
 ## Theory
 
 Every instruction a CPU executes ultimately reads or writes memory. Modern hardware
@@ -154,16 +153,11 @@ cache line. The coherence protocol (MESI) forces the line to bounce between core
 
 constexpr long long ITERS = 100'000'000LL;
 
-// BAD: counters on the same cache line
-struct SharedCounters {
-    long long a;  // offset 0
-    long long b;  // offset 8 — same 64-byte line as 'a'
+struct SharedCounters {          // BAD: same cache line
+    long long a;                 // offset 0
+    long long b;                 // offset 8
 };
-
-// GOOD: each counter on its own cache line
-struct alignas(64) PaddedCounter {
-    long long value;
-};
+struct alignas(64) PaddedCounter { long long value; };  // GOOD: own line
 
 void increment(long long* ptr) {
     for (long long i = 0; i < ITERS; ++i)
@@ -277,15 +271,12 @@ int main() {
 
     int num_nodes = numa_max_node() + 1;
     std::cout << "NUMA nodes: " << num_nodes << "\n";
-
     constexpr size_t SIZE = 64 * 1024 * 1024;  // 64 MB
 
     for (int node = 0; node < num_nodes; ++node) {
         void* mem = numa_alloc_onnode(SIZE, node);
         if (!mem) { std::cerr << "alloc failed on node " << node << "\n"; continue; }
-
-        // Touch every page to force allocation
-        std::memset(mem, 0, SIZE);
+        std::memset(mem, 0, SIZE);  // Touch every page
 
         auto t0 = std::chrono::high_resolution_clock::now();
         volatile long long sum = 0;
@@ -298,7 +289,6 @@ int main() {
         std::cout << "Node " << node << ": " << ms << " ms"
                   << (node == numa_node_of_cpu(sched_getcpu()) ? " (local)" : " (remote)")
                   << "\n";
-
         numa_free(mem, SIZE);
     }
     return 0;
