@@ -30,6 +30,8 @@ If operation A **happens-before** operation B, then A's effects are visible to B
 - **Synchronizes-with**: an atomic store with release ordering synchronizes-with an atomic load with acquire ordering on the same variable
 - **Transitivity**: if A happens-before B, and B happens-before C, then A happens-before C
 
+This example demonstrates the happens-before guarantee using acquire-release ordering. The producer writes non-atomic data and then sets a flag with `release`; the consumer spins on the flag with `acquire`, which guarantees it sees the producer's earlier write to `data`.
+
 ```cpp
 #include <atomic>
 #include <thread>
@@ -74,6 +76,8 @@ C++ provides six memory orderings, from weakest to strongest:
 
 ### Relaxed Ordering — Counters
 
+This code uses `memory_order_relaxed` to atomically increment a shared counter from multiple threads. Relaxed ordering is the cheapest option — it guarantees atomicity but no ordering relative to other memory operations, which is perfectly fine for a simple counter where we only care about the final total.
+
 ```cpp
 #include <atomic>
 #include <thread>
@@ -99,6 +103,8 @@ int main() {
 ```
 
 ### Acquire-Release — Flag Synchronization
+
+This example shows how acquire-release ordering synchronizes a non-atomic write between threads. The writer stores data and then sets a flag with `release`; the reader spins on the flag with `acquire`. The release-acquire pair creates a happens-before edge, guaranteeing the reader sees the payload written before the flag was set.
 
 ```cpp
 #include <atomic>
@@ -129,6 +135,8 @@ int main() {
 ```
 
 ### Sequential Consistency — Strongest Guarantee
+
+This example demonstrates `memory_order_seq_cst`, the strongest (and default) ordering. Four threads write and read two atomic booleans; sequential consistency guarantees a single global order visible to all threads, so the variable `z` can never end up at zero. With weaker orderings like relaxed, `z` could be zero on architectures like ARM or POWER.
 
 ```cpp
 #include <atomic>
@@ -169,6 +177,8 @@ int main() {
 
 ### Compiler Reordering
 
+This short snippet illustrates that the compiler is free to reorder independent statements for optimization. In single-threaded code this is harmless, but in multi-threaded code another thread might observe the writes in the wrong order — which is why memory orderings and fences exist.
+
 ```cpp
 // The compiler MAY reorder these if no dependency exists:
 int a = 1;     // Could execute second
@@ -189,6 +199,8 @@ x86-64 has a relatively strong memory model (TSO), so bugs may hide there and on
 ---
 
 ## 4. Lock-Free Stack (Treiber Stack)
+
+This implements a classic Treiber stack — a lock-free, thread-safe stack that uses compare-and-swap (CAS) loops instead of mutexes. `push` atomically swings the head pointer to a new node, retrying if another thread modified head first. `pop` does the reverse. This approach gives excellent scalability under contention because threads never block — they just retry.
 
 ```cpp
 #include <atomic>
@@ -436,6 +448,8 @@ Thread 1: CAS succeeds (head is A again) but the stack state has changed
 
 ### Tagged Pointer Example
 
+This code packs a 48-bit pointer and a 16-bit ABA counter into a single 64-bit value using bit-fields. On x86-64 only 48 bits are used for virtual addresses, so the upper bits can store a monotonically increasing tag. Each time the pointer is updated the tag increments, preventing the ABA problem because stale CAS comparisons will fail on the changed tag.
+
 ```cpp
 #include <atomic>
 #include <cstdint>
@@ -567,6 +581,8 @@ sequenceDiagram
 
 ### Solution 1 — Relaxed Counter
 
+This solution shows four threads each incrementing a shared atomic counter 250,000 times using `memory_order_relaxed`. Because we only need the final sum and no ordering between other variables, relaxed is the most efficient choice — the result is always exactly 1,000,000.
+
 ```cpp
 #include <atomic>
 #include <thread>
@@ -590,6 +606,8 @@ int main() {
 ```
 
 ### Solution 2 — Spinlock
+
+This builds a simple spinlock using `std::atomic_flag`. The `lock()` method spins in a loop calling `test_and_set` with acquire ordering until it succeeds; `unlock()` clears the flag with release ordering. The acquire-release pair ensures that all writes inside the critical section are visible to the next thread that acquires the lock.
 
 ```cpp
 #include <atomic>

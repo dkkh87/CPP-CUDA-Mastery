@@ -47,6 +47,8 @@ The Singleton pattern ensures a class has exactly one instance with a global acc
 
 ### Meyers' Singleton (C++11 Guaranteed Thread-Safe)
 
+This implements the Meyers' Singleton idiom: the single instance is a `static` local variable inside `instance()`. C++11 guarantees that static local initialization is thread-safe, so no manual locking is needed. Copy and move operations are explicitly deleted to prevent accidental duplication of the singleton.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -81,6 +83,8 @@ int main() {
 ```
 
 ### Alternative: `std::call_once` Singleton
+
+This alternative uses `std::call_once` with a `std::once_flag` to initialize the singleton exactly once, even when multiple threads call `instance()` concurrently. Unlike the Meyers' approach, the instance is stored as a `static std::unique_ptr`, giving you explicit control over construction and destruction order.
 
 ```cpp
 #include <mutex>
@@ -142,6 +146,8 @@ classDiagram
 ```
 
 ### Modern Factory with `std::unique_ptr` and `std::variant`
+
+This factory uses a self-registering pattern: shape creators register themselves into a map at startup via a static lambda. At runtime, you call `create("circle", 5.0)` and get back a `std::unique_ptr<Shape>`. Returning `unique_ptr` makes ownership explicit and eliminates memory leaks — the caller owns the object and it's automatically cleaned up.
 
 ```cpp
 #include <iostream>
@@ -223,6 +229,8 @@ int main() {
 
 ### Variant-Based Factory (No Inheritance)
 
+This shows a factory approach that avoids virtual functions entirely by using `std::variant` to hold different shape types. The `area()` function uses `std::visit` with `if constexpr` to dispatch at compile time based on the actual type. This is ideal when the set of types is fixed at compile time and you want zero-overhead polymorphism.
+
 ```cpp
 #include <variant>
 #include <cmath>
@@ -258,6 +266,8 @@ int main() {
 ---
 
 ## Pattern 3: Observer Pattern
+
+This implements a type-safe Observer pattern using `std::function` and variadic templates. The `Event<Args...>` class lets any number of listeners subscribe with callbacks; when `emit()` is called, all registered callbacks fire. The `StockTicker` example shows how a price change automatically notifies a display listener and an alert listener.
 
 ```cpp
 #include <iostream>
@@ -346,6 +356,8 @@ classDiagram
     Sorter ..> QuickSort : uses
 ```
 
+This implements the Strategy pattern using C++20 concepts instead of traditional inheritance. A `SortStrategy` concept constrains which types can be used as sorting strategies, and the `Sorter` class is templated on the strategy — so the compiler picks the right algorithm at compile time with zero virtual-call overhead.
+
 ```cpp
 #include <iostream>
 #include <vector>
@@ -403,6 +415,8 @@ int main() {
 ---
 
 ## Pattern 5: Builder Pattern (Fluent Interface)
+
+This implements the Builder pattern with a fluent API for constructing `HttpRequest` objects. Each setter method returns `*this` so calls can be chained (e.g., `.url(...).method(...).body(...)`). The `build()` method validates required fields and returns the fully constructed object. This avoids constructors with many parameters and makes the calling code self-documenting.
 
 ```cpp
 #include <iostream>
@@ -479,6 +493,8 @@ graph LR
 
 ### Header: `widget.h`
 
+This header declares the public API for `Widget` but hides all implementation details behind a forward-declared `Impl` struct held via `std::unique_ptr`. Clients include only this header and never see the private data members, which means changing the implementation won't force recompilation of code that uses `Widget`.
+
 ```cpp
 #pragma once
 #include <memory>
@@ -502,6 +518,8 @@ private:
 ```
 
 ### Source: `widget.cpp`
+
+This source file defines the hidden `Impl` struct with the actual data and logic, then implements the `Widget` methods by delegating to `pimpl_`. The destructor, move constructor, and move assignment are defaulted here (not in the header) because the compiler needs to see the complete `Impl` type to generate them.
 
 ```cpp
 #include "widget.h"
@@ -563,6 +581,9 @@ std::string Widget::name() const { return pimpl_->name; }
 ## Solutions
 
 ### Solution 1: ConfigManager Singleton
+
+This solution applies the Meyers' Singleton pattern to build a `ConfigManager` that stores key-value pairs. It uses a static local for thread-safe lazy initialization and deletes copy operations to prevent duplication. Any part of the application can access the same configuration via `ConfigManager::instance()`.
+
 ```cpp
 #include <iostream>
 #include <unordered_map>
@@ -593,6 +614,9 @@ int main() {
 ```
 
 ### Solution 3: Self-Registering LogHandler Factory
+
+This solution demonstrates a self-registering factory for log handlers. `ConsoleLog` and `FileLog` register themselves at program startup via a static lambda, so adding a new handler requires no changes to the factory. At runtime, you request a handler by name and get back a `unique_ptr<LogHandler>` ready to use.
+
 ```cpp
 #include <iostream>
 #include <memory>
