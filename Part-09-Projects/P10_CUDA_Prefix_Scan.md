@@ -1,8 +1,6 @@
 # Project 10 — Blelloch Parallel Prefix Scan & Applications
 
-> **Difficulty:** 🟡 Intermediate
-> **Time estimate:** 6–8 hours
-> **GPU required:** CUDA Compute Capability ≥ 6.0
+> **Difficulty:** 🟡 Intermediate  |  **Time:** 6–8 hours  |  **GPU:** CC ≥ 6.0
 
 ## Prerequisites
 
@@ -497,5 +495,5 @@ ncu --set full --kernel-name blelloch_scan_kernel ./blelloch_scan
 2. **The recursive block-sum pattern** generalises to any array length with only O(log N / B) kernel launches.
 3. **Bank-conflict padding** is a one-line macro that can double shared-memory throughput on older architectures.
 4. **Stream compaction** (predicate → scan → scatter) is the canonical scan application — it appears everywhere from ray tracing to graph algorithms.
-5. **CUB's decoupled look-back** is the state of the art; understanding Blelloch first makes the look-back optimisation intuitive.
-6. **Prefix scan is a building block** — sorting, sparse matrix ops, histogram equalisation, and BFS all reduce to scan + scatter.
+5. **CUB's decoupled look-back** is state of the art; understanding Blelloch first makes it intuitive.
+6. **Prefix scan is a building block** — sorting, sparse matrix ops, histograms, and BFS all reduce to scan + scatter.
