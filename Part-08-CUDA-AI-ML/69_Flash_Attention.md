@@ -485,6 +485,8 @@ Can use B=128 with room for double-buffering.
 
 ### Solution 3 — Online Softmax (CPU)
 
+This CPU implementation demonstrates the online softmax algorithm — the mathematical core of Flash Attention. It processes data in fixed-size chunks, maintaining a running maximum and running sum, so it never needs to see all values at once. The result is mathematically identical to the standard two-pass softmax.
+
 ```cpp
 #include <cmath>
 #include <vector>
@@ -516,6 +518,8 @@ void online_softmax(const float* x, float* out, int N, int chunk) {
 ```
 
 ### Solution 4 — Causal Masking (Key Changes)
+
+Causal (autoregressive) masking prevents each position from attending to future positions — essential for language model training. The key optimization is skipping entire K,V tiles that fall completely above the diagonal, cutting roughly half the computation for causal attention.
 
 ```cuda
 // In the outer loop over K,V tiles:

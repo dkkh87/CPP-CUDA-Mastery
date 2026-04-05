@@ -64,6 +64,8 @@ After:  [Conv+BN+ReLU] → [Conv+BN+ReLU] → [Conv+BN+Add+ReLU]           (3 ke
 
 ## 3. Complete Code: ONNX → TensorRT → C++ Inference
 
+This complete program demonstrates the full TensorRT workflow: it parses an ONNX model, optimizes it with layer fusion and optional FP16 precision, serializes the engine to disk, then loads and runs inference. Dynamic batch sizes are supported via optimization profiles that specify min/opt/max dimensions, so one engine handles variable workloads.
+
 ```cpp
 #include <NvInfer.h>
 #include <NvOnnxParser.h>
@@ -209,6 +211,8 @@ int main() {
 
 ## 4. INT8 Calibration
 
+INT8 quantization compresses model weights and activations from 32-bit floats to 8-bit integers, delivering 2–4× faster inference with minimal accuracy loss. This calibrator feeds representative data through the network to measure activation ranges, then computes optimal per-tensor scaling factors using entropy minimization (KL-divergence). The calibration cache avoids re-running this process on every engine build.
+
 ```cpp
 class Int8Calibrator : public nvinfer1::IInt8EntropyCalibrator2 {
 public:
@@ -262,6 +266,8 @@ private:
 
 ## 5. Custom TensorRT Plugin
 
+When TensorRT doesn't natively support an operation (like the Swish activation `x * sigmoid(x)`), you write a custom plugin. This plugin implements the `IPluginV2DynamicExt` interface — the CUDA kernel runs during inference, and TensorRT handles memory management and scheduling around it.
+
 ```cpp
 #include <NvInferPlugin.h>
 
@@ -299,6 +305,8 @@ public:
 
 ## 6. ONNX → TensorRT Workflow
 
+The first step is exporting a trained PyTorch model to ONNX format — an open interchange format that TensorRT can parse. Dynamic axes allow the exported model to accept variable batch sizes at inference time.
+
 ```python
 # Step 1: Export from PyTorch
 import torch, torchvision.models as models
@@ -307,6 +315,8 @@ torch.onnx.export(model, torch.randn(1,3,224,224).cuda(), "resnet50.onnx",
     input_names=["input"], output_names=["output"],
     dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, opset_version=17)
 ```
+
+The `trtexec` command-line tool builds an optimized TensorRT engine from the ONNX file, applying FP16 precision and configuring dynamic shape ranges in one step.
 
 ```bash
 # Step 2: Build engine with trtexec
@@ -403,6 +413,9 @@ Deploy ResNet-50 + YOLOv8 on Triton with ensemble scheduling. Write a gRPC clien
 ## 10. Solutions
 
 ### Solution 1
+
+This script creates a simple two-layer MLP in Python, exports it to ONNX, then uses `trtexec` to build an FP16 TensorRT engine — demonstrating the complete export-to-optimize pipeline.
+
 ```bash
 python -c "
 import torch, torch.nn as nn
@@ -416,6 +429,9 @@ ls -lh mlp.engine
 ```
 
 ### Solution 2
+
+This benchmark function runs inference at multiple batch sizes (1 through 32), measuring average latency after warmup iterations. The throughput (images/second) reveals how well TensorRT utilizes the GPU at different batch sizes.
+
 ```cpp
 void benchmarkBatches(TRTInferencer& inf) {
     for (int bs : {1, 4, 8, 16, 32}) {
@@ -433,6 +449,9 @@ void benchmarkBatches(TRTInferencer& inf) {
 ```
 
 ### Solution 3
+
+This uses the INT8 calibrator class from Section 4 to build an INT8-quantized engine, feeding 500 representative images to determine optimal quantization ranges.
+
 ```cpp
 void buildINT8(const std::string& onnxPath) {
     auto calibData = loadImages("imagenet_val/", 500);  // user-implemented

@@ -101,6 +101,8 @@ flowchart TD
 
 ### 3.1 Custom Activation Functions — GELU, SiLU, Mish
 
+This code implements three modern activation functions (GELU, SiLU, and Mish) as `__device__` helper functions so any kernel can call them. It then provides two kernels: one that fuses bias addition with a selectable activation in a single pass, and a vectorized variant that uses `float4` loads to process four elements at once — quadrupling effective memory bandwidth because the GPU issues one wide transaction instead of four narrow ones.
+
 ```cuda
 // custom_activations.cu — Compile: nvcc -O3 -arch=sm_80 custom_activations.cu
 #include <cuda_runtime.h>
@@ -178,6 +180,8 @@ int main() {
 
 ### 3.2 Custom Loss Function — Focal Loss Kernel
 
+Focal loss down-weights easy, well-classified examples and focuses training on hard ones — it's the standard loss for object detection (e.g., RetinaNet) where background vastly outnumbers objects. This kernel computes focal loss entirely in registers: it first runs a numerically stable softmax (subtract max, exponentiate, normalize), then applies the focal weighting `(1 − p_t)^γ` to the log-probability of the true class.
+
 ```cuda
 // focal_loss.cu — FL(p_t) = -α_t * (1 - p_t)^γ * log(p_t)
 #include <cuda_runtime.h>
@@ -219,6 +223,8 @@ int main() {
 ```
 
 ### 3.3 Fused LayerNorm + Dropout + Residual Kernel
+
+This is the most complex fusion in the chapter: it combines layer normalization, dropout, and residual addition into a single kernel that touches HBM only once. Shared memory stores the intermediate dropout+residual values between the two passes — the first pass computes the mean and variance, the second normalizes — so no temporary tensors ever hit global memory. Each thread block handles one row (one token), making the pattern ideal for Transformer inference.
 
 ```cuda
 // fused_layernorm_dropout_residual.cu
@@ -309,6 +315,8 @@ int main() {
 
 ### 3.4 Memory Bandwidth Analysis
 
+This table shows the arithmetic intensity (FLOPs per byte transferred) of common ML operations. Operations below the GPU's ridge point are memory-bound — their speed is limited by how fast data moves, not how fast the GPU computes — which is why kernel fusion (reducing memory traffic) matters far more than raw FLOP optimization for elementwise ops.
+
 ```
 Operation          | FLOPs/elem | Bytes/elem (R+W) | AI (FLOPs/Byte)
 ───────────────────|────────────|──────────────────|─────────────────
@@ -324,6 +332,8 @@ All elementwise ops are memory-bound. GEMM is compute-bound.
 ```
 
 ### 3.5 Fused Attention — Why FlashAttention Fuses
+
+This pseudocode contrasts standard attention — which writes the full N×N score matrix to HBM three separate times, making it O(N²) in memory — with FlashAttention's fused approach that tiles the computation in SRAM and never materializes the full attention matrix. The result is O(N) HBM traffic instead of O(N²), which is why FlashAttention dominates modern Transformer training.
 
 ```
 Standard attention (Q, K, V are [B, H, N, d]):
@@ -363,6 +373,8 @@ Using CUDA events, measure the fused LN+Dropout+Residual kernel vs. three separa
 
 ### Solution 1 — LeakyReLU
 
+This implements LeakyReLU as a simple `__device__` function that returns the input for positive values and scales it by `alpha` for negative values, applied elementwise via a standard grid-stride kernel.
+
 ```cuda
 __device__ __forceinline__ float leaky_relu(float x, float alpha) {
     return x > 0.0f ? x : alpha * x;
@@ -374,6 +386,8 @@ __global__ void leaky_relu_kernel(const float* in, float* out, int N, float alph
 ```
 
 ### Solution 2 — Fused Bias + SiLU + Residual (Vectorized)
+
+This fused kernel performs bias addition, SiLU activation, and residual connection in a single pass using `float4` vectorized loads — reading three inputs and writing one output instead of the nine HBM transfers that three separate kernels would require.
 
 ```cuda
 __global__ void fused_bias_silu_residual_vec4(
@@ -396,6 +410,8 @@ __global__ void fused_bias_silu_residual_vec4(
 
 ### Solution 3 — Label Smoothing Loss
 
+This kernel computes label smoothing loss, which blends the standard cross-entropy against the true label with a uniform distribution over all classes — a regularization technique that prevents the model from becoming overconfident. The blending factor `epsilon` controls how much probability mass is redistributed.
+
 ```cuda
 __global__ void label_smoothing_loss_kernel(
     const float* __restrict__ logits, const int* __restrict__ targets,
@@ -417,6 +433,8 @@ __global__ void label_smoothing_loss_kernel(
 ```
 
 ### Solution 4 — Fused RMSNorm + SiLU Gate
+
+This implements the LLaMA-style fused RMSNorm + SiLU gating pattern: RMSNorm normalizes by the root-mean-square of activations (simpler than LayerNorm — no mean subtraction), and the result is multiplied by a SiLU-activated gate tensor. The reduction uses warp shuffles plus shared memory to compute the sum of squares across the full hidden dimension.
 
 ```cuda
 __global__ void fused_rmsnorm_silu_gate_kernel(

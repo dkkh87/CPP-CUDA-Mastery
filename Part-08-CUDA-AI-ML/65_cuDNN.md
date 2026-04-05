@@ -329,6 +329,8 @@ int main() {
 
 ### 4.3 Batch Normalization Inference
 
+This function normalizes activations during inference using pre-computed running statistics (mean and variance accumulated during training) rather than computing them from the current batch. The normalization is applied in-place on the GPU through cuDNN's `cudnnBatchNormalizationForwardInference` primitive, which uses a spatial mode where a single mean/variance pair is shared across all spatial positions (H×W) per channel — the standard approach for convolutional layers.
+
 ```cpp
 // Batch normalization during inference (using running mean/variance)
 void batchnorm_inference(cudnnHandle_t cudnn,
@@ -527,6 +529,8 @@ Load random weights, run a single forward pass on a 32×3×32×32 input, and ver
 
 ### Solution 1
 
+This creates a cuDNN tensor descriptor for a batch of 16 RGB 224×224 images in NCHW layout and prints the total memory required. It demonstrates the first step of any cuDNN workflow: describing your data's shape and type so the library knows how to operate on it.
+
 ```cpp
 #include <cudnn.h>
 #include <cstdio>
@@ -547,6 +551,8 @@ int main() {
 ```
 
 ### Solution 2
+
+This sets up a convolution with a 3×3 filter (padding=1, stride=1) and uses `cudnnGetConvolution2dForwardOutputDim` to compute the output dimensions automatically. Instead of manually calculating output height and width — which is error-prone with varying padding, stride, and dilation — cuDNN performs the shape inference for you, ensuring the descriptor dimensions stay consistent throughout the pipeline.
 
 ```cpp
 // Same includes as Solution 1
@@ -580,6 +586,8 @@ int main() {
 ```
 
 ### Solution 3
+
+This benchmarks all available convolution algorithms for a given problem size using `cudnnFindConvolutionForwardAlgorithm`, which internally times each candidate and ranks them by speed. It prints each algorithm's execution time, workspace requirement, and status — demonstrating cuDNN's auto-tuning capability that lets you pick the fastest kernel for your specific tensor dimensions and hardware.
 
 ```cpp
 // Key excerpt — full error checking omitted for brevity

@@ -52,6 +52,8 @@ Tensor Core GEMMs can deliver 10–20× the throughput of standard FP32 CUDA cor
 
 ### 2.1 — Single-Precision GEMM (cublasSgemm)
 
+This example performs a basic matrix multiplication (C = αAB + βC) on the GPU using `cublasSgemm`. Because cuBLAS uses column-major storage (inherited from Fortran-era BLAS), the matrices are filled and read in column-major order — a detail that trips up many newcomers. The code also wraps every CUDA and cuBLAS call in error-checking macros so failures surface immediately instead of silently corrupting results.
+
 ```cpp
 // file: sgemm_basic.cu
 // Compile: nvcc sgemm_basic.cu -lcublas -o sgemm_basic
@@ -154,6 +156,8 @@ int main() {
 
 ### 2.2 — Mixed-Precision GEMM with cublasGemmEx
 
+This example stores input matrices in FP16 (half precision) but accumulates the dot-product results in FP32 (single precision). This mixed-precision approach lets the GPU's Tensor Cores process twice the data per cycle while keeping numerical accuracy close to full FP32 — exactly the trade-off modern deep-learning training relies on. The `cublasGemmEx` API makes this explicit by letting you specify separate data types for inputs, output, and the internal compute.
+
 ```cpp
 // file: mixed_precision_gemm.cu
 // Compile: nvcc mixed_precision_gemm.cu -lcublas -o mixed_gemm
@@ -227,6 +231,8 @@ int main() {
 ```
 
 ### 2.3 — Batched GEMM for Batch Processing
+
+Batched GEMM multiplies many independent matrix pairs in a single API call, which is far more efficient than launching separate GEMM calls in a loop. This pattern appears everywhere in ML: processing a mini-batch of samples through a linear layer, computing multiple attention heads in a transformer, or running parallel convolution channels. The code builds an array of device pointers (one per matrix pair) and passes them to `cublasSgemmBatched`.
 
 ```cpp
 // file: batched_gemm.cu
@@ -328,6 +334,8 @@ int main() {
 ```
 
 ### 2.4 — Forward and Backward Pass with cuBLAS
+
+This implements a complete training step for a single linear layer (Y = W·X) using cuBLAS, showing that forward pass, input-gradient, and weight-gradient computations are all just GEMM calls with different transpose flags. The forward pass computes Y = W·X, the backward pass computes dX = Wᵀ·dY for the upstream gradient, and dW = dY·Xᵀ for the weight update. Understanding this reveals why cuBLAS sits at the heart of every neural network framework.
 
 ```cpp
 // file: forward_backward.cu
@@ -552,6 +560,8 @@ printf("Max absolute error: %e\n", maxErr);  // expect ~1e-5 for N=128
 ```
 
 ### Solution 2 — Row-Major Trick
+
+Instead of rearranging your data into column-major order, you can exploit the identity (AB)ᵀ = BᵀAᵀ: swap the operand order and let cuBLAS multiply the already-transposed row-major matrices directly, producing the result in row-major layout with zero data movement.
 
 ```cpp
 // Key insight: For row-major A (M×K) and B (K×N), computing C = A*B:

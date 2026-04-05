@@ -150,6 +150,8 @@ flowchart LR
 
 ## 4. Code — End-to-End Training Pipeline
 
+This program ties together every CUDA library from the book into a single training pipeline. Raw image bytes are normalized on GPU (avoiding CPU bottlenecks), cuDNN and cuBLAS handle forward/backward passes, a custom cross-entropy loss kernel computes gradients, and a fused AdamW optimizer updates all 25 million parameters in one kernel launch. Dual CUDA streams allow data loading to overlap with computation.
+
 ```cpp
 // full_gpu_pipeline.cu
 // Compile: nvcc -O3 -std=c++17 full_gpu_pipeline.cu -lcudnn -lcublas -lnccl -o pipeline
@@ -370,6 +372,8 @@ Memory drops from O(N) to O(√N) for N layers — checkpoint every √N layers.
 
 ## 8. Code — TensorRT Engine Builder (Ch 68 Extended)
 
+This builds a TensorRT inference engine from an ONNX model with FP16 and INT8 optimizations enabled, then runs inference through it. TensorRT automatically fuses layers, selects optimal kernels for the target GPU, and compresses weights — turning a training-ready model into a production-optimized engine.
+
 ```cpp
 // trt_inference.cpp — Link: -lnvinfer -lnvonnxparser
 #include <NvInfer.h>
@@ -455,6 +459,8 @@ accuracy and throughput.
 
 ### Solution 1
 
+This profiles the training pipeline with Nsight Systems, which captures a timeline of all CUDA kernel executions, memory transfers, and stream activity — revealing bottlenecks like idle GPU time or missing compute/data overlap.
+
 ```bash
 nsys profile --stats=true ./pipeline
 # Look for: CUDA Kernel Statistics (time%, count, avg duration)
@@ -462,6 +468,8 @@ nsys profile --stats=true ./pipeline
 ```
 
 ### Solution 2
+
+This kernel converts FP32 weights to FP16 for mixed-precision training. The forward pass uses FP16 for speed (leveraging Tensor Cores), while the optimizer stays in FP32 to preserve the small gradient updates that FP16 cannot represent.
 
 ```cpp
 #include <cuda_fp16.h>
@@ -474,6 +482,8 @@ __global__ void fp32_to_fp16(const float* in, __half* out, int N) {
 ```
 
 ### Solution 3
+
+Gradient accumulation simulates a larger effective batch size by summing gradients over multiple micro-batches before running the optimizer. This is essential when the desired batch size exceeds GPU memory.
 
 ```cpp
 const int ACCUM = 4;
@@ -488,6 +498,8 @@ for (int iter = 0; iter < ITERS; iter++) {
 
 ### Solution 4
 
+This sets up NCCL (NVIDIA Collective Communications Library) for multi-GPU data parallelism. Each GPU runs its own forward/backward pass on a different batch shard, then `ncclAllReduce` averages the gradients across all GPUs before the optimizer step.
+
 ```cpp
 int ngpu; cudaGetDeviceCount(&ngpu);
 ncclComm_t comms[ngpu];
@@ -498,6 +510,8 @@ ncclCommInitAll(comms, ngpu, nullptr);
 ```
 
 ### Solution 5
+
+This INT8 calibrator feeds representative images through the network to measure activation value ranges, enabling TensorRT to quantize the model from FP32 to INT8 with minimal accuracy loss — typically achieving 4–7× faster inference.
 
 ```cpp
 class ImageCalibrator : public nvinfer1::IInt8EntropyCalibrator2 {
