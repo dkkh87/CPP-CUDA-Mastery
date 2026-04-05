@@ -459,6 +459,8 @@ int main() {
 
 ### Pool Resource for Variable-Size Allocations
 
+This example benchmarks a standard `std::list` against a `std::pmr::list` backed by an `unsynchronized_pool_resource`. The pool resource pre-allocates memory in chunks and recycles freed blocks, which dramatically reduces the cost of frequent small allocations that linked lists require. Running this benchmark shows how PMR can speed up node-based containers with zero code changes beyond swapping the allocator.
+
 ```cpp
 #include <memory_resource>
 #include <vector>
@@ -504,6 +506,8 @@ int main() {
 ---
 
 ## Allocator-Aware Containers
+
+This code builds a `TrackingResource`—a custom PMR memory resource that wraps any upstream allocator and records every allocation and deallocation. It then uses this resource with `pmr::vector`, `pmr::map`, and `pmr::string` to show exactly how many bytes each container requests. This pattern is invaluable for profiling real applications to understand where memory is going.
 
 ```cpp
 #include <memory_resource>
@@ -580,6 +584,8 @@ int main() {
 ## Real-World Applications
 
 ### Game Engine Frame Allocator
+
+This implements a frame allocator commonly used in game engines. It pre-allocates a large block of memory (1 MB here) and hands out pieces by bumping a pointer forward, just like an arena allocator. At the start of each frame, `begin_frame()` resets the pointer back to the beginning, instantly "freeing" all memory from the previous frame with zero overhead. This avoids calling `new`/`delete` thousands of times per frame for temporary objects like render commands.
 
 ```cpp
 #include <cstddef>
@@ -669,6 +675,8 @@ int main() {
 
 ### Solution 1: Logging Allocator
 
+This custom allocator wraps the global `operator new`/`operator delete` and prints a message every time memory is allocated or freed. When plugged into `std::vector`, it reveals the internal growth strategy—you can see the vector doubling its capacity and deallocating the old buffer as elements are added.
+
 ```cpp
 #include <cstddef>
 #include <iostream>
@@ -704,6 +712,8 @@ int main() {
 ```
 
 ### Solution 2: Zero-Heap PMR
+
+This demonstrates how to use PMR with a stack-allocated buffer so that no heap allocation ever occurs. A 1024-byte `std::array` on the stack serves as the backing memory, and `null_memory_resource()` is set as the upstream—meaning if the buffer runs out, allocation throws instead of falling back to the heap. This technique is ideal for embedded systems or real-time code where heap usage is forbidden.
 
 ```cpp
 #include <memory_resource>

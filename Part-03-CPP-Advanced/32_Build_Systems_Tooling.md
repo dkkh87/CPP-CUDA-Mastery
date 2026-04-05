@@ -47,6 +47,8 @@ graph TD
 
 ### Modern CMake: Targets and Properties
 
+This `CMakeLists.txt` shows the modern, target-centric approach to CMake. Instead of setting global variables that affect all targets, it uses `target_*` commands to attach compile features, include directories, and warning flags to specific targets. Properties marked `PUBLIC` propagate to anything that links against the library, while `PRIVATE` properties stay internal. This pattern scales well for large projects with many interdependent libraries.
+
 ```cmake
 cmake_minimum_required(VERSION 3.20)
 project(MyProject VERSION 1.0.0 LANGUAGES CXX)
@@ -92,6 +94,8 @@ add_test(NAME unit_tests COMMAND tests)
 ```
 
 ### CMake Presets (CMakePresets.json)
+
+CMake presets let you define named build configurations in a JSON file so that every developer and CI pipeline uses the exact same settings. This file defines three presets: a default release build, a debug build with sanitizers enabled, and a CI build with testing turned on. Presets eliminate long command-line flags and make builds reproducible across machines.
 
 ```json
 {
@@ -142,14 +146,17 @@ add_test(NAME unit_tests COMMAND tests)
 }
 ```
 
+Once presets are defined, you can configure, build, and test using simple `--preset` flags instead of passing all the options manually each time.
+
 ```bash
-# Using presets
 cmake --preset=debug
 cmake --build --preset=debug
 ctest --preset=ci
 ```
 
 ### CMake for C++20 Modules
+
+C++20 modules replace `#include` with a faster, more structured import system. CMake 3.28+ supports modules natively through `FILE_SET CXX_MODULES`, which tells the build system how to compile module interface files (`.cppm`) and manage their dependencies automatically.
 
 ```cmake
 cmake_minimum_required(VERSION 3.28)
@@ -203,6 +210,8 @@ int main() {
 
 ### Conan
 
+Conan is a popular C++ package manager that downloads pre-built binaries (or builds from source) for third-party libraries. This example installs `fmt`, `spdlog`, `nlohmann_json`, and `gtest`, then uses Conan's generated CMake toolchain to configure and build the project seamlessly.
+
 ```bash
 # Install Conan
 pip install conan
@@ -233,6 +242,8 @@ cmake --build --preset conan-release
 
 ### vcpkg
 
+vcpkg is Microsoft's C++ package manager that integrates directly with CMake via a toolchain file. After bootstrapping vcpkg and installing packages, you just point CMake at vcpkg's toolchain file and `find_package()` calls work automatically.
+
 ```bash
 # Install vcpkg
 git clone https://github.com/microsoft/vcpkg.git
@@ -246,6 +257,8 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
 ```
 
 ### FetchContent (Built-in CMake)
+
+`FetchContent` is CMake's built-in way to pull in external dependencies at configure time—no external package manager needed. It clones the specified Git repositories and makes their targets available as if they were part of your project. This is the simplest approach for small-to-medium projects.
 
 ```cmake
 include(FetchContent)
@@ -274,6 +287,8 @@ target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
 
 ### AddressSanitizer (ASan) — Memory Bugs
 
+This intentionally buggy program demonstrates three common memory errors that AddressSanitizer detects at runtime: writing past the end of a heap-allocated array, reading memory after it has been freed, and overflowing a stack buffer. ASan instruments every memory access to catch these bugs immediately with a detailed stack trace.
+
 ```cpp
 // buggy.cpp — demonstrates bugs ASan catches
 #include <vector>
@@ -296,14 +311,17 @@ int main() {
 }
 ```
 
+To enable ASan, compile with the `-fsanitize=address` flag and include `-fno-omit-frame-pointer` so that stack traces are complete and readable.
+
 ```bash
-# Compile with ASan
 g++ -fsanitize=address -fno-omit-frame-pointer -g buggy.cpp -o buggy
 ./buggy
 # Output: detailed report with stack trace showing exact location
 ```
 
 ### ThreadSanitizer (TSan) — Data Races
+
+This program has a classic data race: two threads increment the same global `counter` variable without any synchronization. The result is undefined behavior—the final value is unpredictable. ThreadSanitizer detects this at runtime and reports exactly which threads accessed which memory location.
 
 ```cpp
 // race.cpp — data race example
@@ -326,14 +344,17 @@ int main() {
 }
 ```
 
+To enable TSan, compile with `-fsanitize=thread`. Note that TSan cannot be combined with ASan in the same build—they must be run separately.
+
 ```bash
-# Compile with TSan
 g++ -fsanitize=thread -g race.cpp -o race -pthread
 ./race
 # Output: WARNING: ThreadSanitizer: data race
 ```
 
 ### UndefinedBehaviorSanitizer (UBSan)
+
+This code triggers several forms of undefined behavior that compilers are allowed to exploit in unpredictable ways: signed integer overflow (wrapping past `INT_MAX`), null pointer dereference, and shifting by more bits than the type holds. UBSan catches these at runtime and prints a clear diagnostic instead of producing silently wrong results.
 
 ```cpp
 // ub.cpp — undefined behavior examples
@@ -356,13 +377,16 @@ int main() {
 }
 ```
 
+UBSan has minimal runtime overhead compared to ASan and TSan, making it safe to enable even in optimized builds during development.
+
 ```bash
-# Compile with UBSan
 g++ -fsanitize=undefined -g ub.cpp -o ub
 ./ub
 ```
 
 ### CMake Integration for Sanitizers
+
+This CMake snippet adds sanitizer support as configurable options. Developers can enable any sanitizer by passing `-DENABLE_ASAN=ON` (or TSAN/UBSAN) at configure time, which automatically applies the correct compiler and linker flags to every target in the project. This is cleaner than manually editing compiler flags.
 
 ```cmake
 # Add sanitizer options as a CMake option
@@ -391,6 +415,8 @@ endif()
 ## Static Analysis
 
 ### clang-tidy
+
+This `.clang-tidy` configuration file enables a curated set of checks from the `bugprone`, `cppcoreguidelines`, `modernize`, `performance`, and `readability` categories while disabling a few noisy rules. It also enforces naming conventions (CamelCase for classes, lower_case for variables) and promotes certain warnings to errors so they break the build.
 
 ```yaml
 # .clang-tidy configuration file
@@ -425,8 +451,9 @@ CheckOptions:
     value: 'std::shared_ptr;std::unique_ptr'
 ```
 
+These commands show how to run clang-tidy from the command line—either on individual files or across the whole project. The `-p` flag points to the `compile_commands.json` generated by CMake, and the `-fix` flag lets clang-tidy automatically apply suggested fixes.
+
 ```bash
-# Run clang-tidy
 clang-tidy src/*.cpp -- -std=c++20 -Iinclude
 
 # With compile_commands.json (generated by CMake)
@@ -440,6 +467,8 @@ find src -name '*.cpp' | xargs clang-tidy -p build/
 ```
 
 ### cppcheck
+
+cppcheck is a standalone static analysis tool that catches bugs like uninitialized variables, null dereferences, and resource leaks without needing a compilation database. The `--enable=all` flag turns on every check category, and `--xml` generates machine-readable reports for CI integration.
 
 ```bash
 # Basic analysis
@@ -459,6 +488,8 @@ int x;
 
 ### perf (Linux)
 
+`perf` is the Linux kernel's built-in profiler. It uses hardware performance counters to measure CPU cycles, cache misses, and branch mispredictions with near-zero overhead. The `perf record` + `perf report` workflow samples the call stack at high frequency, and the flamegraph pipeline converts that data into a visual diagram showing where your program spends its time.
+
 ```bash
 # Record performance profile
 perf record -g ./myapp
@@ -475,6 +506,8 @@ perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg
 ```
 
 ### Valgrind
+
+Valgrind runs your program inside a virtual CPU that tracks every memory access. `--leak-check=full` detects memory leaks, Callgrind profiles function call counts and costs, Cachegrind simulates the CPU cache to find cache-unfriendly code, and Helgrind detects threading errors. The trade-off is a 10–50× slowdown, so Valgrind is best used on focused test cases rather than full workloads.
 
 ```bash
 # Memory leak detection
@@ -493,6 +526,8 @@ valgrind --tool=helgrind ./myapp
 ```
 
 ### Profiling Example Code
+
+This self-contained program generates 10 million random integers, sorts them, and sums the result—providing a realistic workload for profiling. It uses `chrono` to measure wall-clock time internally, but the real value comes from running it under `perf` or Valgrind to see CPU-level metrics like cache miss rates and instruction counts.
 
 ```cpp
 #include <vector>
@@ -525,8 +560,9 @@ int main() {
 }
 ```
 
+Compile with optimizations (`-O2`) and debug info (`-g`) so the profiler can map hot spots back to source lines. Then use `perf stat` for a quick summary or `perf record`/`perf report` for a detailed call-graph breakdown.
+
 ```bash
-# Compile with debug info for profiling
 g++ -O2 -g -std=c++20 profile.cpp -o profile
 
 # Profile with perf
@@ -540,6 +576,8 @@ perf report
 ## Code Formatting
 
 ### clang-format Configuration
+
+This `.clang-format` file customizes code formatting based on the Google style with project-specific tweaks: 4-space indentation, a 100-column limit, and grouped includes sorted by system vs. project headers. Storing this in the repository root ensures every developer and CI check produces identically formatted code.
 
 ```yaml
 # .clang-format
@@ -569,8 +607,9 @@ SortIncludes: CaseSensitive
 ...
 ```
 
+These commands apply the formatting rules from `.clang-format`. Use `-i` to format files in-place during development, or `--dry-run --Werror` in CI to fail the build if any file is incorrectly formatted without actually changing it.
+
 ```bash
-# Format single file
 clang-format -i src/main.cpp
 
 # Format all files
@@ -588,6 +627,8 @@ clang-format -dump-config -style=google > .clang-format
 ## CI/CD: GitHub Actions for C++
 
 ### Complete CI Workflow
+
+This GitHub Actions workflow runs three parallel job groups on every push and PR: a build matrix that compiles with both GCC and Clang on Linux and macOS, a sanitizer matrix that tests with ASan/TSan/UBSan individually, and a static analysis job that runs clang-tidy and checks code formatting. If any job fails, the PR is blocked from merging.
 
 ```yaml
 # .github/workflows/cpp-ci.yml
@@ -714,6 +755,8 @@ graph LR
 
 ### Solution 1: Basic CMakeLists.txt
 
+This minimal CMakeLists.txt creates a library target and an executable that links to it, with strict warning flags (`-Wall -Wextra -Werror`) applied only to the library using `PRIVATE`. The generator expression `$<$<CXX_COMPILER_ID:GNU,Clang>:...>` ensures the flags are only used with GCC and Clang, not MSVC.
+
 ```cmake
 cmake_minimum_required(VERSION 3.20)
 project(MyApp VERSION 1.0 LANGUAGES CXX)
@@ -732,6 +775,8 @@ target_link_libraries(myapp PRIVATE mylib)
 ```
 
 ### Solution 3: FetchContent with fmt + Catch2
+
+This CMake project uses `FetchContent` to download `fmt` (formatting library) and `Catch2` (testing framework) from GitHub at configure time. The library `mylib` links against `fmt` publicly so consumers get it automatically, and the test executable links against both `mylib` and `Catch2`. Running `ctest` will discover and execute all Catch2 test cases.
 
 ```cmake
 cmake_minimum_required(VERSION 3.20)
