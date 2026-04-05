@@ -221,9 +221,7 @@ int main() {
     printf("  Input:  FP16\n  Compute: FP32\n  Output: FP32\n");
 
     CUBLAS_CHECK(cublasDestroy(handle));
-    CUDA_CHECK(cudaFree(d_A));
-    CUDA_CHECK(cudaFree(d_B));
-    CUDA_CHECK(cudaFree(d_C));
+    CUDA_CHECK(cudaFree(d_A)); CUDA_CHECK(cudaFree(d_B)); CUDA_CHECK(cudaFree(d_C));
     return 0;
 }
 ```
@@ -260,7 +258,7 @@ int main() {
     CUDA_CHECK(cudaMalloc(&d_B, strideB * batchCount * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&d_C, strideC * batchCount * sizeof(float)));
 
-    // In practice, fill with actual data; zero-fill here for demonstration
+    // In practice, fill with actual data; zero-fill for demonstration
     CUDA_CHECK(cudaMemset(d_A, 0, strideA * batchCount * sizeof(float)));
     CUDA_CHECK(cudaMemset(d_B, 0, strideB * batchCount * sizeof(float)));
 
@@ -362,54 +360,28 @@ int main() {
     cublasHandle_t handle;
     CUBLAS_CHECK(cublasCreate(&handle));
 
-    // ── FORWARD PASS ──────────────────────────────────────────
-    // Row-major: Y = X · W  →  cuBLAS column-major: Y^T = W^T · X^T
-    // Y^T is (out_f × batch), W^T is (out_f × in_f), X^T is (in_f × batch)
-    CUBLAS_CHECK(cublasSgemm(
-        handle,
-        CUBLAS_OP_N,     // W^T: no further transpose needed
-        CUBLAS_OP_N,     // X^T: no further transpose needed
-        out_f, batch, in_f,
-        &one,
-        d_W, out_f,      // W stored row-major → col-major W^T, ld=out_f
-        d_X, in_f,       // X stored row-major → col-major X^T, ld=in_f
-        &zero,
-        d_Y, out_f       // Y stored row-major → col-major Y^T, ld=out_f
-    ));
-    printf("Forward pass:  Y[%d×%d] = X[%d×%d] × W[%d×%d]\n",
+    // ── FORWARD PASS ─────────────────────────────────
+    // Row-major: Y = X·W → cuBLAS: Y^T = W^T · X^T
+    CUBLAS_CHECK(cublasSgemm(handle,
+        CUBLAS_OP_N, CUBLAS_OP_N,
+        out_f, batch, in_f, &one,
+        d_W, out_f, d_X, in_f, &zero, d_Y, out_f));
+    printf("Forward:  Y[%d×%d] = X[%d×%d] × W[%d×%d]\n",
            batch, out_f, batch, in_f, in_f, out_f);
 
-    // ── BACKWARD PASS ─────────────────────────────────────────
-    // dX = dY · W^T   →  cuBLAS: dX^T = W · dY^T
-    CUBLAS_CHECK(cublasSgemm(
-        handle,
-        CUBLAS_OP_T,     // W^T transposed back → W
-        CUBLAS_OP_N,     // dY^T
-        in_f, batch, out_f,
-        &one,
-        d_W, out_f,      // W with ld=out_f, transposed → in_f × out_f
-        d_dY, out_f,     // dY^T: out_f × batch
-        &zero,
-        d_dX, in_f       // dX^T: in_f × batch
-    ));
-    printf("Backward dX:   dX[%d×%d] = dY[%d×%d] × W^T[%d×%d]\n",
-           batch, in_f, batch, out_f, out_f, in_f);
+    // ── BACKWARD: dX = dY·W^T → cuBLAS: dX^T = W · dY^T
+    CUBLAS_CHECK(cublasSgemm(handle,
+        CUBLAS_OP_T, CUBLAS_OP_N,
+        in_f, batch, out_f, &one,
+        d_W, out_f, d_dY, out_f, &zero, d_dX, in_f));
+    printf("Backward: dX[%d×%d] = dY × W^T\n", batch, in_f);
 
-    // dW = X^T · dY   →  cuBLAS: dW^T = dY^T · X
-    //                                   (out_f×batch) · (batch×in_f)
-    CUBLAS_CHECK(cublasSgemm(
-        handle,
-        CUBLAS_OP_N,     // dY^T
-        CUBLAS_OP_T,     // X^T transposed → X
-        out_f, in_f, batch,
-        &one,
-        d_dY, out_f,     // dY^T: out_f × batch
-        d_X, in_f,       // X^T with ld=in_f, transposed → batch × in_f
-        &zero,
-        d_dW, out_f      // dW^T: out_f × in_f
-    ));
-    printf("Backward dW:   dW[%d×%d] = X^T[%d×%d] × dY[%d×%d]\n",
-           in_f, out_f, in_f, batch, batch, out_f);
+    // ── BACKWARD: dW = X^T·dY → cuBLAS: dW^T = dY^T · X
+    CUBLAS_CHECK(cublasSgemm(handle,
+        CUBLAS_OP_N, CUBLAS_OP_T,
+        out_f, in_f, batch, &one,
+        d_dY, out_f, d_X, in_f, &zero, d_dW, out_f));
+    printf("Backward: dW[%d×%d] = X^T × dY\n", in_f, out_f);
 
     CUBLAS_CHECK(cublasDestroy(handle));
     CUDA_CHECK(cudaFree(d_X));  CUDA_CHECK(cudaFree(d_W));  CUDA_CHECK(cudaFree(d_Y));
@@ -655,40 +627,32 @@ cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
 - (c) 70–80%
 - (d) 85–95% ✅
 
----
-
 ## 8. Key Takeaways
 
-- **GEMM is the computational core of deep learning** — every linear layer, convolution (via im2col), and attention head decomposes into matrix multiplication.
-- **cuBLAS provides near-peak GPU utilization** (85–95% of theoretical FLOPS) with a single API call — don't write your own GEMM unless you need custom fusion.
-- **Column-major layout** is the default. For row-major C/C++ data, swap operand order (`C = A·B` becomes `cublas(B^T, A^T)`) rather than transposing data.
-- **`cublasGemmEx` is the workhorse for ML** — it supports mixed precision (FP16 in, FP32 accumulate), Tensor Core acceleration, and algorithm selection.
-- **Batched GEMM** (`StridedBatched` preferred) eliminates kernel launch overhead when processing multiple independent matrix pairs.
-- **Tensor Cores** deliver 10–20× throughput over CUDA cores; cuBLAS enables them through math mode settings and data type choices.
-- **Pad dimensions to multiples of 8** (FP16) or 16 (INT8) to enable Tensor Core fast paths.
-- **Alpha/beta are passed by pointer** — this allows device-resident scalars from prior kernels without an extra host-device sync.
-- **The backward pass is just more GEMM** — `dX = dY · Wᵀ` and `dW = Xᵀ · dY` require only transpose flags, not data movement.
-- **Always use error-checking macros** — silent cuBLAS failures are notoriously hard to debug.
-
----
+- **GEMM is the computational core of deep learning** — linear layers, convolutions (im2col), and attention all decompose into matrix multiply.
+- **cuBLAS provides near-peak GPU utilization** (85–95% of theoretical FLOPS) with a single API call.
+- **Column-major layout** is the default. For row-major data, swap operand order rather than transposing.
+- **`cublasGemmEx`** supports mixed precision (FP16 in, FP32 accumulate), Tensor Cores, and algorithm selection.
+- **Batched GEMM** (`StridedBatched` preferred) eliminates launch overhead for multiple matrix pairs.
+- **Tensor Cores** deliver 10–20× throughput; enabled through math mode and data type choices.
+- **Pad dimensions to multiples of 8** (FP16) or 16 (INT8) for Tensor Core fast paths.
+- **Alpha/beta are passed by pointer** — enables device-resident scalars without host-device sync.
+- **The backward pass is just more GEMM** with transpose flags, not data movement.
+- **Always use error-checking macros** — silent cuBLAS failures are hard to debug.
 
 ## 9. Chapter Summary
 
-This chapter covered cuBLAS as the foundational GPU library for matrix operations in machine learning. We started with why GEMM dominates neural network compute, then explored the cuBLAS API from handle creation through single-precision, mixed-precision, and batched GEMM calls. The critical column-major vs. row-major distinction was addressed with the operand-swap trick that avoids costly data transpositions. We demonstrated a complete forward and backward pass for a linear layer using only `cublasSgemm` calls with appropriate transpose flags. Performance tuning through algorithm selection, math modes, and Tensor Core enablement was covered, along with a realistic comparison showing why cuBLAS outperforms hand-written kernels. The exercises progress from basic verification through production-grade training loops.
-
----
+This chapter covered cuBLAS as the foundational GPU library for matrix operations in ML. We explored why GEMM dominates neural network compute, the cuBLAS API (handle, column-major layout, leading dimensions), single-precision/mixed-precision/batched GEMM calls, and the operand-swap trick for row-major data. A complete forward and backward pass demonstrated that training is just GEMM with different transpose flags. Performance tuning through algorithm selection, math modes, and Tensor Core enablement was covered alongside a comparison showing why cuBLAS outperforms hand-written kernels.
 
 ## 10. Real-World Insight
 
-> **PyTorch and TensorFlow call cuBLAS under the hood.** When you write `torch.nn.Linear(512, 256)` and run a forward pass, PyTorch dispatches to `cublasGemmEx` (or cuBLAS LT on newer versions). The framework handles the row-major to column-major translation, workspace allocation, and algorithm selection transparently. Understanding cuBLAS directly becomes critical when:
-> - You're writing custom CUDA extensions for operations not in standard frameworks
-> - You're building inference engines (TensorRT, custom serving) that need maximum throughput
-> - You're debugging numerical mismatches between CPU and GPU results
-> - You're optimizing multi-GPU training where GEMM latency directly impacts scaling efficiency
+> **PyTorch and TensorFlow call cuBLAS under the hood.** `torch.nn.Linear(512, 256)` dispatches to `cublasGemmEx` internally. Understanding cuBLAS directly matters when:
+> - Writing custom CUDA extensions for non-standard operations
+> - Building inference engines (TensorRT, custom serving) for maximum throughput
+> - Debugging numerical mismatches between CPU and GPU results
+> - Optimizing multi-GPU training where GEMM latency impacts scaling
 >
-> At companies like NVIDIA, Google, and Meta, ML infrastructure teams routinely profile cuBLAS calls to find the optimal (M, N, K) decomposition, pad dimensions for Tensor Core alignment, and select algorithms per layer. A 3% GEMM improvement across a 1000-GPU training cluster saves hundreds of GPU-hours per run.
-
----
+> At scale, ML infrastructure teams profile cuBLAS calls to find optimal (M,N,K) decompositions, pad for Tensor Core alignment, and select algorithms per layer. A 3% GEMM improvement across a 1000-GPU cluster saves hundreds of GPU-hours per run.
 
 ## 11. Common Mistakes
 
@@ -703,39 +667,29 @@ This chapter covered cuBLAS as the foundational GPU library for matrix operation
 | **Ignoring stream association** | Unexpected serialization | Use `cublasSetStream()` to assign the handle to your CUDA stream |
 | **Using `cublasSgemmBatched` for contiguous data** | Extra pointer-array overhead | Use `cublasSgemmStridedBatched` when matrices are contiguous with uniform stride |
 
----
-
 ## 12. Interview Questions
 
 ### Q1: Why is GEMM central to deep learning, and how does cuBLAS optimize it?
 
-**Answer:** Every fully-connected layer computes `Y = X·W + b`, where the matrix multiply `X·W` is a GEMM. Convolutions are converted to GEMM via im2col, and attention computes `Q·K^T` and `scores·V` — also GEMMs. cuBLAS optimizes GEMM through: (1) **tiled algorithms** that maximize L1/L2/shared memory reuse, (2) **Tensor Core** utilization for FP16/BF16/TF32 with hardware multiply-accumulate, (3) **auto-tuning** across multiple algorithm variants, and (4) **double-buffering** that overlaps global memory loads with computation. A well-tuned cuBLAS GEMM reaches 85–95% of peak GPU FLOPS, while naive implementations rarely exceed 30%.
+**Answer:** Every FC layer computes `Y = X·W + b` — a GEMM. Convolutions convert to GEMM via im2col; attention computes `Q·K^T` and `scores·V`. cuBLAS optimizes through: (1) tiled algorithms maximizing cache reuse, (2) Tensor Core utilization for FP16/BF16/TF32, (3) auto-tuning across algorithm variants, (4) double-buffering overlapping loads with compute. Achieves 85–95% peak FLOPS vs ~30% for naive kernels.
 
-### Q2: Explain how to multiply row-major matrices using cuBLAS without transposing data.
+### Q2: How do you multiply row-major matrices with cuBLAS?
 
-**Answer:** cuBLAS assumes column-major layout. A row-major matrix `A[M×K]` is equivalent to the column-major transpose `A^T[K×M]` in the same memory. To compute the row-major product `C = A·B`:
+**Answer:** A row-major `A[M×K]` is column-major `A^T[K×M]` in the same memory. For `C = A·B`, compute `C^T = B^T · A^T` by swapping operands: `cublasSgemm(handle, N, N, N, M, K, &α, d_B, N, d_A, K, &β, d_C, N)`. Result is row-major C — no transpose kernel needed.
 
-1. cuBLAS sees `A^T` (K×M) and `B^T` (N×K) in memory
-2. We want `C^T = (A·B)^T = B^T · A^T`
-3. Call: `cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C, N)`
-4. The result `d_C` is `C^T` in column-major, which is `C` in row-major — exactly what we need
+### Q3: `cublasSgemmBatched` vs `cublasSgemmStridedBatched`?
 
-This avoids an explicit transpose kernel, which would cost O(M×K) memory bandwidth for no compute.
+**Answer:** **StridedBatched** requires contiguous matrices with fixed strides — no pointer array, lower overhead. Ideal for ML batch processing. **Batched** uses device pointer arrays allowing arbitrary addresses — needed for non-contiguous or variable-size matrices. StridedBatched preferred 90%+ of the time.
 
-### Q3: Compare `cublasSgemmBatched` vs `cublasSgemmStridedBatched`. When would you use each?
+### Q4: What conditions enable Tensor Cores via cuBLAS?
 
-**Answer:** Both multiply batches of matrix pairs in a single API call. **StridedBatched** assumes all A matrices (and all B, C) are packed contiguously with a fixed stride between them — it requires no pointer array and has lower launch overhead. This is ideal for batch processing in neural networks where data is naturally contiguous. **Batched** (pointer-array version) takes an array of device pointers, allowing each matrix to be at an arbitrary memory address. Use it when matrices are non-contiguously allocated (e.g., gathered from different buffers) or have variable sizes within the batch. In practice, StridedBatched is preferred 90%+ of the time in ML workloads.
+**Answer:** cuBLAS dispatches to Tensor Cores when: (1) math mode set to `CUBLAS_TENSOR_OP_MATH` or `CUBLAS_DEFAULT_MATH`; (2) supported data types (FP16, BF16, TF32, INT8, FP8); (3) dimensions are multiples of 8 (FP16) or 4 (TF32). Non-aligned dimensions fall back to CUDA cores for remainder tiles.
 
-### Q4: How do Tensor Cores interact with cuBLAS, and what conditions must be met?
+### Q5: Describe the backward pass cuBLAS calls for a linear layer.
 
-**Answer:** Tensor Cores are hardware units that compute small matrix multiply-accumulate operations (e.g., 4×4×4 for FP16 on Volta, 8×4×8 on Ampere). cuBLAS automatically dispatches to Tensor Core kernels when: (1) Math mode is set appropriately (`CUBLAS_TENSOR_OP_MATH` or `CUBLAS_DEFAULT_MATH` on Ampere+); (2) Data types support it — FP16, BF16, TF32, INT8, FP8; (3) Dimensions M, N, K are multiples of 8 for FP16 or multiples of 4 for TF32. Non-aligned dimensions still work but fall back to CUDA-core paths for the remainder tiles. Using `cublasGemmEx` with `CUBLAS_COMPUTE_32F` and FP16 inputs is the most common Tensor Core configuration in production ML inference.
+**Answer:** Given `Y = X·W` and loss gradient `dY`:
+1. `dX = dY · W^T` — `cublasSgemm` with `CUBLAS_OP_T` on W
+2. `dW = X^T · dY` — `cublasSgemm` with `CUBLAS_OP_T` on X (use β=1.0 for gradient accumulation)
+3. `W -= lr · dW` — `cublasSaxpy` with α = -lr
 
-### Q5: Walk through the cuBLAS calls needed for the backward pass of a linear layer.
-
-**Answer:** Given forward pass `Y = X·W` with loss gradient `dY`:
-
-1. **Gradient w.r.t. input:** `dX = dY · W^T` — Use `cublasSgemm` with `CUBLAS_OP_T` on W. This propagates gradients to the preceding layer.
-2. **Gradient w.r.t. weights:** `dW = X^T · dY` — Use `cublasSgemm` with `CUBLAS_OP_T` on X. This is accumulated (β=1.0) if processing multiple micro-batches.
-3. **Weight update:** `W -= lr · dW` — Use `cublasSaxpy` with alpha = -lr, or a custom kernel.
-
-All three operations are GEMMs with different transpose configurations. No data rearrangement is needed — only the `CUBLAS_OP_T` / `CUBLAS_OP_N` flags change. This is why cuBLAS is the computational backbone of training frameworks: the same function handles forward, backward-data, and backward-weight with just flag changes.
+Same function, different transpose flags — no data rearrangement needed.
