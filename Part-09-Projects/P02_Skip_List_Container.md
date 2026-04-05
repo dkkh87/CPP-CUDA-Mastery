@@ -1,10 +1,6 @@
 # Project 02 — STL-Compatible Skip List Container
 
-> **Difficulty:** 🟡 Intermediate
-> **Time estimate:** 8–12 hours
-> **Standard:** C++20 (`-std=c++20`)
-
----
+> **Difficulty:** 🟡 Intermediate  |  **Time:** 8–12 hours  |  **Standard:** C++20 (`-std=c++20`)
 
 ## Prerequisites
 
@@ -23,8 +19,6 @@
 3. Wire up **allocator-aware** node management via `rebind` and `allocator_traits`.
 4. Enforce key ordering at compile time with C++20 **concepts**.
 5. Benchmark against `std::set` and reason about cache-line behaviour.
-
----
 
 ## Architecture
 
@@ -68,14 +62,11 @@ graph TD
     style N7 fill:#ff6b6b,color:#fff
 ```
 
-**Key insight:** each node stores a *variable-length* array of forward pointers.
-Searching starts at the highest level and drops down, yielding expected **O(log n)** hops.
-
----
+**Key insight:** each node stores a *variable-length* array of forward pointers. Searching starts at the highest level and drops down, yielding expected **O(log n)** hops.
 
 ## Step-by-Step Implementation
 
-### Complete Code — `skip_list.hpp`
+### `skip_list.hpp`
 
 ```cpp
 #pragma once
@@ -91,17 +82,14 @@ Searching starts at the highest level and drops down, yielding expected **O(log 
 #include <utility>
 #include <vector>
 
-// ── Concept: keys must support three-way comparison ──────────────
 template <typename K>
 concept OrderedKey = std::three_way_comparable<K>
                   && std::copyable<K>
                   && std::default_initializable<K>;
 
-// ── Forward declarations ─────────────────────────────────────────
 template <OrderedKey K, typename Alloc> class SkipList;
 template <OrderedKey K>                 struct SkipNode;
 
-// ── Node ─────────────────────────────────────────────────────────
 template <OrderedKey K>
 struct SkipNode {
     K                          key{};
@@ -109,17 +97,13 @@ struct SkipNode {
 
     explicit SkipNode(int level)
         : forward(static_cast<std::size_t>(level + 1), nullptr) {}
-
     SkipNode(K k, int level)
         : key{std::move(k)},
           forward(static_cast<std::size_t>(level + 1), nullptr) {}
-
     [[nodiscard]] int level() const noexcept {
         return static_cast<int>(forward.size()) - 1;
     }
 };
-
-// ── Iterator (forward) ──────────────────────────────────────────
 template <OrderedKey K>
 class SkipListIterator {
 public:
@@ -128,13 +112,10 @@ public:
     using difference_type   = std::ptrdiff_t;
     using pointer           = const K*;
     using reference         = const K&;
-
     SkipListIterator() noexcept = default;
     explicit SkipListIterator(SkipNode<K>* n) noexcept : node_{n} {}
-
     reference   operator*()  const noexcept { return node_->key; }
     pointer     operator->() const noexcept { return &node_->key; }
-
     SkipListIterator& operator++() noexcept {
         node_ = node_->forward[0];
         return *this;
@@ -142,22 +123,15 @@ public:
     SkipListIterator operator++(int) noexcept {
         auto tmp = *this; ++*this; return tmp;
     }
-
     bool operator==(const SkipListIterator& o) const noexcept = default;
-
 private:
     SkipNode<K>* node_{nullptr};
-
     template <OrderedKey, typename> friend class SkipList;
 };
-
 static_assert(std::forward_iterator<SkipListIterator<int>>);
-
-// ── SkipList ─────────────────────────────────────────────────────
 template <OrderedKey K, typename Alloc = std::allocator<K>>
 class SkipList {
 public:
-    // ── public type aliases (STL convention) ─────────────────────
     using key_type       = K;
     using value_type     = K;
     using size_type      = std::size_t;
@@ -165,25 +139,19 @@ public:
     using allocator_type = Alloc;
     using iterator       = SkipListIterator<K>;
     using const_iterator = iterator;  // keys are immutable
-
     static constexpr int kMaxLevel  = 16;
     static constexpr double kProb   = 0.5;
 
-    // ── constructors / destructor ────────────────────────────────
     explicit SkipList(const Alloc& alloc = Alloc{})
         : alloc_{alloc},
           head_{create_node(K{}, kMaxLevel)},
           gen_{std::random_device{}()} {}
-
     SkipList(std::initializer_list<K> init, const Alloc& alloc = Alloc{})
         : SkipList(alloc)
     {
         for (auto& k : init) insert(k);
     }
-
     ~SkipList() { clear(); destroy_node(head_); }
-
-    // non-copyable, movable
     SkipList(const SkipList&)            = delete;
     SkipList& operator=(const SkipList&) = delete;
 
@@ -195,7 +163,6 @@ public:
         o.size_  = 0;
         o.level_ = 0;
     }
-
     SkipList& operator=(SkipList&& o) noexcept {
         if (this != &o) {
             clear();
@@ -207,16 +174,10 @@ public:
         }
         return *this;
     }
-
-    // ── capacity ─────────────────────────────────────────────────
     [[nodiscard]] bool      empty() const noexcept { return size_ == 0; }
     [[nodiscard]] size_type size()  const noexcept { return size_; }
-
-    // ── iterators ────────────────────────────────────────────────
     iterator begin() const noexcept { return iterator{head_->forward[0]}; }
     iterator end()   const noexcept { return iterator{nullptr}; }
-
-    // ── lookup ───────────────────────────────────────────────────
     iterator find(const K& key) const noexcept {
         auto* x = head_;
         for (int i = level_; i >= 0; --i)
@@ -227,12 +188,10 @@ public:
             return iterator{x};
         return end();
     }
-
     bool contains(const K& key) const noexcept {
         return find(key) != end();
     }
 
-    // ── insert ───────────────────────────────────────────────────
     std::pair<iterator, bool> insert(const K& key) {
         // collect update path
         std::vector<SkipNode<K>*> update(
@@ -265,7 +224,6 @@ public:
         return {iterator{node}, true};
     }
 
-    // ── erase ────────────────────────────────────────────────────
     size_type erase(const K& key) {
         std::vector<SkipNode<K>*> update(
             static_cast<size_type>(kMaxLevel + 1), nullptr);
@@ -299,7 +257,6 @@ public:
         return next_it;
     }
 
-    // ── clear ────────────────────────────────────────────────────
     void clear() noexcept {
         auto* x = head_ ? head_->forward[0] : nullptr;
         while (x) {
@@ -314,7 +271,6 @@ public:
         size_  = 0;
     }
 
-    // ── comparison ───────────────────────────────────────────────
     friend auto operator<=>(const SkipList& a, const SkipList& b) {
         return std::lexicographical_compare_three_way(
             a.begin(), a.end(), b.begin(), b.end());
@@ -324,10 +280,8 @@ public:
         return (a <=> b) == 0;
     }
 
-    // ── allocator access ─────────────────────────────────────────
     allocator_type get_allocator() const noexcept { return alloc_; }
 
-    // ── debug: level distribution ────────────────────────────────
     [[nodiscard]] std::vector<int> level_histogram() const {
         std::vector<int> hist(static_cast<size_type>(kMaxLevel + 1), 0);
         for (auto* n = head_->forward[0]; n; n = n->forward[0])
@@ -369,130 +323,83 @@ private:
 };
 ```
 
----
-
 ### Companion Test File — `skip_list_test.cpp`
 
 ```cpp
 #include "skip_list.hpp"
-
 #include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <numeric>
 #include <ranges>
-#include <set>
 #include <string>
 #include <vector>
 
-// ── helpers ──────────────────────────────────────────────────────
 #define ASSERT_EQ(a, b)  assert((a) == (b))
 #define ASSERT_TRUE(x)   assert((x))
 #define ASSERT_FALSE(x)  assert(!(x))
 
-// ── Test 1: basic insert & contains ─────────────────────────────
-void test_insert_contains() {
+void test_insert_find_erase() {
     SkipList<int> sl;
     auto [it1, ok1] = sl.insert(10);
-    ASSERT_TRUE(ok1);
-    ASSERT_EQ(*it1, 10);
-
-    auto [it2, ok2] = sl.insert(10);  // duplicate
-    ASSERT_FALSE(ok2);
-    ASSERT_EQ(*it2, 10);
-
-    sl.insert(5);
-    sl.insert(20);
-    sl.insert(15);
+    ASSERT_TRUE(ok1);  ASSERT_EQ(*it1, 10);
+    auto [it2, ok2] = sl.insert(10);
+    ASSERT_FALSE(ok2); ASSERT_EQ(*it2, 10);  // duplicate rejected
+    sl.insert(5); sl.insert(20); sl.insert(15);
     ASSERT_EQ(sl.size(), 4u);
     ASSERT_TRUE(sl.contains(5));
-    ASSERT_TRUE(sl.contains(15));
     ASSERT_FALSE(sl.contains(99));
-    std::cout << "  [PASS] insert & contains\n";
+    // find
+    ASSERT_EQ(*sl.find(15), 15);
+    ASSERT_TRUE(sl.find(42) == sl.end());
+    // erase by key
+    ASSERT_EQ(sl.erase(15), 1u);
+    ASSERT_EQ(sl.erase(15), 0u);
+    ASSERT_FALSE(sl.contains(15));
+    // erase via iterator
+    auto it = sl.find(10);
+    auto next = sl.erase(it);
+    ASSERT_EQ(sl.size(), 2u);
+    if (next != sl.end()) ASSERT_EQ(*next, 20);
+    std::cout << "  [PASS] insert / find / erase\n";
 }
 
-// ── Test 2: sorted iteration ────────────────────────────────────
 void test_sorted_order() {
     SkipList<int> sl{30, 10, 50, 20, 40};
     std::vector<int> out(sl.begin(), sl.end());
-    std::vector<int> expected{10, 20, 30, 40, 50};
-    ASSERT_EQ(out, expected);
+    ASSERT_EQ(out, (std::vector<int>{10, 20, 30, 40, 50}));
     std::cout << "  [PASS] sorted iteration\n";
 }
 
-// ── Test 3: erase by key ────────────────────────────────────────
-void test_erase() {
-    SkipList<int> sl{1, 2, 3, 4, 5};
-    ASSERT_EQ(sl.erase(3), 1u);
-    ASSERT_EQ(sl.erase(3), 0u);  // already gone
-    ASSERT_EQ(sl.size(), 4u);
-    ASSERT_FALSE(sl.contains(3));
-
-    // erase first and last
-    sl.erase(1);
-    sl.erase(5);
-    std::vector<int> out(sl.begin(), sl.end());
-    ASSERT_EQ(out, (std::vector<int>{2, 4}));
-    std::cout << "  [PASS] erase\n";
-}
-
-// ── Test 4: erase via iterator ──────────────────────────────────
-void test_erase_iterator() {
-    SkipList<int> sl{10, 20, 30};
-    auto it = sl.find(20);
-    ASSERT_TRUE(it != sl.end());
-    auto next = sl.erase(it);
-    ASSERT_EQ(sl.size(), 2u);
-    if (next != sl.end()) ASSERT_EQ(*next, 30);
-    std::cout << "  [PASS] erase via iterator\n";
-}
-
-// ── Test 5: find returns end() for missing keys ─────────────────
-void test_find() {
-    SkipList<int> sl{1, 3, 5, 7, 9};
-    ASSERT_TRUE(sl.find(5) != sl.end());
-    ASSERT_EQ(*sl.find(5), 5);
-    ASSERT_TRUE(sl.find(4) == sl.end());
-    std::cout << "  [PASS] find\n";
-}
-
-// ── Test 6: clear & empty ───────────────────────────────────────
-void test_clear() {
+void test_clear_and_reuse() {
     SkipList<int> sl{1, 2, 3};
     sl.clear();
     ASSERT_TRUE(sl.empty());
-    ASSERT_EQ(sl.size(), 0u);
     ASSERT_TRUE(sl.begin() == sl.end());
     sl.insert(42);
     ASSERT_EQ(sl.size(), 1u);
     std::cout << "  [PASS] clear & reuse\n";
 }
 
-// ── Test 7: move semantics ──────────────────────────────────────
-void test_move() {
+void test_move_semantics() {
     SkipList<int> a{1, 2, 3};
     SkipList<int> b{std::move(a)};
     ASSERT_EQ(b.size(), 3u);
     ASSERT_TRUE(b.contains(2));
-
     SkipList<int> c;
     c = std::move(b);
     ASSERT_EQ(c.size(), 3u);
     std::cout << "  [PASS] move semantics\n";
 }
 
-// ── Test 8: three-way comparison ────────────────────────────────
 void test_comparison() {
-    SkipList<int> a{1, 2, 3};
-    SkipList<int> b{1, 2, 3};
-    SkipList<int> c{1, 2, 4};
+    SkipList<int> a{1, 2, 3}, b{1, 2, 3}, c{1, 2, 4};
     ASSERT_TRUE(a == b);
     ASSERT_TRUE((a <=> c) < 0);
     ASSERT_TRUE((c <=> a) > 0);
     std::cout << "  [PASS] operator<=> & ==\n";
 }
 
-// ── Test 9: string keys ─────────────────────────────────────────
 void test_string_keys() {
     SkipList<std::string> sl;
     sl.insert("banana"); sl.insert("apple"); sl.insert("cherry");
@@ -501,7 +408,6 @@ void test_string_keys() {
     std::cout << "  [PASS] string keys\n";
 }
 
-// ── Test 10: large-scale insert + verify ordering ───────────────
 void test_large_scale() {
     SkipList<int> sl;
     constexpr int N = 10'000;
@@ -516,7 +422,6 @@ void test_large_scale() {
     std::cout << "  [PASS] large-scale (N=" << N << ")\n";
 }
 
-// ── Test 11: works with STL algorithms ──────────────────────────
 void test_stl_compat() {
     SkipList<int> sl{5, 3, 8, 1, 9};
     ASSERT_EQ(*std::find(sl.begin(), sl.end(), 8), 8);
@@ -525,24 +430,20 @@ void test_stl_compat() {
     std::cout << "  [PASS] STL algorithm compatibility\n";
 }
 
-// ── Test 12: level histogram sanity ─────────────────────────────
 void test_level_distribution() {
     SkipList<int> sl;
     for (int i = 0; i < 1000; ++i) sl.insert(i);
     auto hist = sl.level_histogram();
-    ASSERT_TRUE(hist[0] > 0);  // level 0 should have the most nodes
+    ASSERT_TRUE(hist[0] > 0);
     std::cout << "  [PASS] level distribution (L0=" << hist[0] << ")\n";
 }
 
 int main() {
     std::cout << "=== SkipList Test Suite ===\n";
-    test_insert_contains();
+    test_insert_find_erase();
     test_sorted_order();
-    test_erase();
-    test_erase_iterator();
-    test_find();
-    test_clear();
-    test_move();
+    test_clear_and_reuse();
+    test_move_semantics();
     test_comparison();
     test_string_keys();
     test_large_scale();
@@ -558,25 +459,17 @@ int main() {
 g++ -std=c++20 -O2 -Wall -Wextra -o skip_test skip_list_test.cpp && ./skip_test
 ```
 
----
-
 ## Testing Strategy
 
 | Layer | What to verify | Method |
 |---|---|---|
-| **Unit** | insert/find/erase correctness, duplicates rejected | Assert-based tests above |
-| **Ordering** | Iteration always yields sorted output | Shuffle N values, insert, verify monotone |
-| **Iterator contract** | `std::forward_iterator` satisfied | `static_assert` in header |
-| **Edge cases** | Empty list ops, single element, erase-all-then-reuse | `test_clear`, erase first/last |
-| **Move semantics** | Source emptied, destination valid | `test_move` |
+| **Unit** | insert/find/erase, duplicates rejected | Assert-based tests above |
+| **Ordering** | Iteration yields sorted output | Shuffle N values, insert, verify monotone |
+| **Iterator** | `std::forward_iterator` satisfied | `static_assert` in header |
+| **Edge cases** | Empty list, single element, clear-then-reuse | `test_clear`, erase first/last |
 | **STL compat** | Works with `<algorithm>` and `<ranges>` | `std::find`, `std::accumulate`, `ranges::count_if` |
-| **Stress** | 10k random inserts stay O(log n)-ish | `test_large_scale` + timing |
-
----
 
 ## Performance Analysis
-
-### Theoretical Complexity
 
 | Operation | Expected | Worst case |
 |---|---|---|
@@ -584,32 +477,23 @@ g++ -std=c++20 -O2 -Wall -Wextra -o skip_test skip_list_test.cpp && ./skip_test
 | `find` | O(log n) | O(n) |
 | `erase` | O(log n) | O(n) |
 | `begin` / `++` | O(1) | O(1) |
-| Space | O(n) | O(n log n) — expected O(n) with p=0.5 |
+| Space | O(n) expected | O(n log n) theoretical max |
 
 **`std::set` comparison:** Skip lists have higher constant factors (pointer chasing across levels) and `std::set` (red-black tree) is cache-friendlier for small keys. However, skip lists win on **lock-free concurrent extensions** and at N > 100k both converge to similar O(log n) scaling. Benchmark with shuffled input — sorted insertion doesn't exercise multi-level search.
 
----
-
 ## Extensions & Challenges
 
-| # | Challenge | Hint |
-|---|---|---|
-| 1 | **Bidirectional iterator** — add `prev` pointers | Each node gets a `backward` pointer; update on insert/erase |
-| 2 | **`lower_bound` / `upper_bound`** | Stop descent one step earlier; mirrors `std::set` API |
-| 3 | **Concurrent skip list** | Use `std::atomic` per-level forward pointers with CAS-based insert |
-| 4 | **Custom comparator** | Template on `Compare = std::less<K>` instead of requiring `<=>` |
-| 5 | **Memory pool allocator** | Write a `PoolAllocator<SkipNode<K>>` and benchmark allocation throughput |
-| 6 | **Serialization** | Dump level-by-level to binary; reconstruct without re-randomising |
-| 7 | **Range insert** | Accept iterator pairs and `std::initializer_list` (partially done) |
-| 8 | **`std::pmr` support** | Use `std::pmr::polymorphic_allocator` for arena-based allocation |
-
----
+1. **Bidirectional iterator** — add `backward` pointer to each node; update on insert/erase.
+2. **`lower_bound` / `upper_bound`** — stop descent one step earlier; mirrors `std::set` API.
+3. **Concurrent skip list** — use `std::atomic` per-level forward pointers with CAS-based insert.
+4. **Custom comparator** — template on `Compare = std::less<K>` instead of requiring `<=>`.
+5. **Memory pool allocator** — write a `PoolAllocator<SkipNode<K>>` and benchmark throughput.
+6. **`std::pmr` support** — use `std::pmr::polymorphic_allocator` for arena-based allocation.
 
 ## Key Takeaways
 
-1. **Probabilistic ≠ unreliable.** With p = 0.5, the expected height is log₂ n and the probability of catastrophic imbalance is negligible (< 1/n²).
-2. **Allocator awareness** is mechanical but essential — `rebind_alloc` + `allocator_traits` makes your container a first-class citizen in any allocator ecosystem.
-3. **Concepts enforce invariants at compile time** — `OrderedKey` prevents instantiation with types that lack `<=>`, producing clear error messages instead of template soup.
-4. **Iterator design is the gateway to STL interop.** Satisfying `std::forward_iterator` unlocks range-`for`, `<algorithm>`, and `<ranges>` with zero extra work.
-5. **`operator<=>`** on containers composes naturally — delegate to `std::lexicographical_compare_three_way` and `==` falls out for free.
-6. **Benchmarking requires shuffled input** — sorted insertion into a skip list still works correctly but doesn't exercise the multi-level search path.
+1. **Probabilistic ≠ unreliable.** With p = 0.5, expected height is log₂ n; catastrophic imbalance probability is negligible (< 1/n²).
+2. **Allocator awareness** via `rebind_alloc` + `allocator_traits` makes your container a first-class citizen in any allocator ecosystem.
+3. **Concepts enforce invariants at compile time** — `OrderedKey` prevents instantiation with types lacking `<=>`.
+4. **Iterator design is the gateway to STL interop.** Satisfying `std::forward_iterator` unlocks range-`for`, `<algorithm>`, and `<ranges>`.
+5. **`operator<=>`** on containers composes naturally via `std::lexicographical_compare_three_way`.
