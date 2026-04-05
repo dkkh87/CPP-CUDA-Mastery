@@ -225,7 +225,8 @@ cmake -B build -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
 - Double-free / invalid-free
 - Memory leaks (with `ASAN_OPTIONS=detect_leaks=1`)
 
-**Runtime Options:**
+**Runtime Options:** You can fine-tune ASan behavior through the `ASAN_OPTIONS` environment variable. For example, enable leak detection, continue running after the first error, or point to a suppressions file for known false positives.
+
 ```bash
 export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:print_stats=1"
 export ASAN_OPTIONS="suppressions=asan_supp.txt:fast_unwind_on_malloc=0"
@@ -291,7 +292,8 @@ g++ -fsanitize=address,undefined -g main.cpp -o main
 - Invalid bool values
 - Shift by negative or too-large amount
 
-**Runtime Options:**
+**Runtime Options:** Use the `UBSAN_OPTIONS` environment variable to control UBSan's behavior at runtime. Enabling `print_stacktrace` gives you full call stacks on errors, and `halt_on_error` makes the program abort on the first violation instead of continuing.
+
 ```bash
 export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 ```

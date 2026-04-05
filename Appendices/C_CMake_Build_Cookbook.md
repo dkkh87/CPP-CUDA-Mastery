@@ -336,6 +336,8 @@ CMakeToolchain
 cmake_layout
 ```
 
+After creating your `conanfile.txt`, run these commands to install the dependencies and build your project using the Conan-generated CMake presets.
+
 ```bash
 # Build with Conan 2.x
 conan install . --output-folder=build --build=missing
@@ -361,6 +363,8 @@ cmake --build --preset conan-release
     ]
 }
 ```
+
+To use vcpkg with CMake, point `CMAKE_TOOLCHAIN_FILE` at the vcpkg toolchain script. This lets CMake automatically find all packages declared in your `vcpkg.json` manifest.
 
 ```bash
 cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
@@ -780,7 +784,8 @@ endif()
 }
 ```
 
-Usage:
+Once your `CMakePresets.json` is in place, you can configure, build, and test using named presets instead of manually passing flags each time.
+
 ```bash
 cmake --preset release
 cmake --build --preset release
