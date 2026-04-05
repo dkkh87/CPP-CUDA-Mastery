@@ -54,6 +54,8 @@ unsigned mask = 0x0000FFFF;  // Only lanes 0-15 participate
 int result = __shfl_sync(mask, val, srcLane);
 ```
 
+This kernel shows `__shfl_sync` in action. Each lane starts with a unique value (its lane ID × 10), then uses `__shfl_sync` to read values from other lanes. Broadcasting from lane 0 gives every thread the same value, while reading from lane 5 retrieves that specific lane's data. All of this happens through the warp's register interconnect — no shared memory or synchronization needed.
+
 ```cuda
 __global__ void shflDemo() {
     int laneId = threadIdx.x % 32;
@@ -205,6 +207,8 @@ graph TD
 
 With XOR shuffle, **all lanes** get the final result (not just lane 0):
 
+Unlike `__shfl_down_sync` where only lane 0 gets the final result, this XOR butterfly pattern gives ALL 32 lanes the sum. At each step, pairs of lanes exchange and add their values symmetrically — so after 5 steps, every lane has accumulated the total. This is useful when all threads need the reduced value (e.g., for normalization).
+
 ```cuda
 __device__ float warpAllReduceSum(float val) {
     val += __shfl_xor_sync(0xFFFFFFFF, val, 16);
@@ -256,6 +260,8 @@ int allTrue = __all_sync(0xFFFFFFFF, predicate);
 
 ### Use Case: Early Exit
 
+This search kernel uses `__any_sync` to let the entire warp exit early as soon as any thread finds the target value. Without this, all 32 threads would continue searching. Warp vote functions like `__any_sync` return the collective result to every thread in the warp in a single cycle.
+
 ```cuda
 __global__ void searchKernel(const int* data, int target, int* found, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -272,6 +278,8 @@ __global__ void searchKernel(const int* data, int target, int* found, int N) {
 ```
 
 ### Use Case: Warp-Uniform Branching Check
+
+This pattern uses `__all_sync` to check if every thread in the warp is within bounds. If all are in-bounds, the kernel skips per-thread boundary checks entirely — avoiding warp divergence and its performance penalty. Only the boundary warps (where some threads are out-of-bounds) pay the cost of the conditional.
 
 ```cuda
 __device__ void efficientPath(float* data, int N) {
@@ -303,6 +311,8 @@ unsigned mask = __match_all_sync(0xFFFFFFFF, val, &pred);
 
 ### Use Case: Warp-Level Histogram
 
+This warp-level histogram uses `__match_any_sync` to find all lanes with the same value, then counts them with `__popc` (population count). Only one "leader" lane per unique value performs the atomic update, drastically reducing the number of expensive atomic operations from 32 (one per lane) to the number of unique values.
+
 ```cuda
 __device__ void warpHistogram(int val, int* hist) {
     unsigned peerMask = __match_any_sync(0xFFFFFFFF, val);
@@ -321,6 +331,8 @@ __device__ void warpHistogram(int val, int* hist) {
 Cooperative Groups (CUDA 9+) provide a **type-safe wrapper** around warp intrinsics.
 
 ### `thread_block_tile<32>` — Warp Tile
+
+This kernel uses Cooperative Groups to perform a warp-level reduction with a cleaner, type-safe API. `tiled_partition<32>` splits the block into warp-sized tiles, and `warp.shfl_down()` provides the same functionality as `__shfl_down_sync` but with compile-time size checking. The result is identical — same performance, better code safety.
 
 ```cuda
 #include <cooperative_groups.h>
@@ -345,6 +357,8 @@ __global__ void coopReduce(const float* input, float* output, int N) {
 ```
 
 ### Flexible Sub-Warp Operations
+
+Cooperative Groups can create tiles smaller than a full warp. Here, `tiled_partition<16>` splits each warp into two independent groups of 16 threads, and `tiled_partition<8>` creates groups of 8. This enables fine-grained reductions — for example, reducing 16-element rows of a matrix without involving the full warp.
 
 ```cuda
 __global__ void subWarpReduce(const float* input, float* output, int N) {
@@ -389,6 +403,8 @@ __global__ void subWarpReduce(const float* input, float* output, int N) {
 
 ### Full Block Reduction: Combined Approach
 
+This is the optimal block-level reduction pattern used in production CUDA libraries. Phase 1: each warp reduces its 32 values using fast shuffle instructions (no shared memory needed). Phase 2: lane 0 of each warp writes its partial sum to a small shared memory array (only 32 entries). Phase 3: the first warp reduces these partial sums. This uses only 1 `__syncthreads` call instead of 10.
+
 ```cuda
 __device__ float blockReduceSum(float val) {
     __shared__ float warpSums[32];  // Max 32 warps per block
@@ -426,6 +442,8 @@ __global__ void reduceKernel(const float* input, float* output, int N) {
 
 ### Performance: Warp Shuffle vs Shared Memory Only
 
+This older shared-memory-only reduction stores all values in shared memory and halves the active threads at each step. While correct, it requires log₂(N) synchronization barriers — 10 barriers for 1024 threads — and uses N×4 bytes of shared memory. The warp shuffle approach above is faster because it eliminates most of these barriers.
+
 ```cuda
 // Shared-memory-only reduction (for comparison)
 __device__ float blockReduceSmem(float val) {
@@ -453,6 +471,8 @@ __device__ float blockReduceSmem(float val) {
 ---
 
 ## 11. Complete Example: Warp-Level Parallel Prefix Sum (Scan)
+
+This warp-level inclusive scan (prefix sum) computes running totals across 32 lanes using `__shfl_up_sync`. At each step, each lane adds the value from `delta` positions earlier. After 5 steps (delta = 1, 2, 4, 8, 16), lane `i` holds the sum of elements 0 through i. This is a fundamental building block for parallel algorithms like stream compaction and sorting.
 
 ```cuda
 __device__ float warpInclusiveScan(float val) {
@@ -512,6 +532,8 @@ __global__ void scanKernel(const float* input, float* output, int N) {
 
 ### Solution 1 (🟢 Broadcast)
 
+This solution demonstrates warp broadcast. Each thread starts with its own thread index as a value, then `__shfl_sync(mask, val, 0)` copies lane 0's value to all 32 lanes in the warp. Lane 15 prints to verify that it received lane 0's value, not its own.
+
 ```cuda
 #include <cstdio>
 
@@ -537,6 +559,8 @@ int main() {
 ```
 
 ### Solution 3 (🟡 Warp Max Reduction)
+
+This complete solution finds the maximum value in a large array using a two-level reduction. `warpReduceMax` finds the max within each warp using shuffles and `fmaxf`. `blockReduceMax` combines warp results via shared memory. The `findMax` kernel uses an atomic compare-and-swap trick to implement atomic max for floats, since CUDA doesn't provide `atomicMax` for floating-point types.
 
 ```cuda
 #include <cstdio>

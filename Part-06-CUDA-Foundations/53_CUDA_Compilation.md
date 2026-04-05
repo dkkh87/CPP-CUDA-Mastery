@@ -69,6 +69,8 @@ PTX (Parallel Thread Execution) is NVIDIA's **virtual instruction set architectu
 
 ### PTX Example
 
+This simple vector addition kernel will be compiled to PTX (Parallel Thread Execution) — NVIDIA's virtual assembly language. Examining the PTX output below reveals how high-level CUDA C++ maps to low-level GPU instructions like `ld.global` (load from global memory), `add.f32` (float add), and `st.global` (store to global memory).
+
 ```cuda
 // CUDA source
 __global__ void add(float* a, float* b, float* c, int n) {
@@ -138,6 +140,8 @@ nvcc --keep -arch=sm_80 -o app kernel.cu
 1. **Forward compatibility**: PTX compiled for `compute_80` can run on any GPU ≥ sm_80. The driver's JIT compiler translates it to the target's SASS at load time.
 2. **Debugging**: PTX is human-readable — you can inspect the generated code for optimization issues.
 3. **Inline PTX**: You can embed PTX directly in CUDA C++ for low-level control:
+
+Inline PTX lets you embed virtual assembly instructions directly in CUDA C++ for operations not exposed by the high-level API. Here, the `clz.b32` instruction (count leading zeros) is used directly because there's no built-in C++ function for it. The `asm()` syntax follows GCC inline assembly conventions with output (`=r`) and input (`r`) constraints.
 
 ```cuda
 __device__ int myClz(int x) {
@@ -253,6 +257,8 @@ Compute capability determines which hardware features and instructions are avail
 
 ### Checking Compute Capability at Runtime
 
+This program queries the GPU's compute capability and hardware specifications at runtime using `cudaGetDeviceProperties`. The compute capability number (e.g., 8.0 for Ampere, 9.0 for Hopper) determines which features and instructions are available. Always check this before using architecture-specific features like Tensor Cores or async memcpy.
+
 ```cuda
 #include <cstdio>
 
@@ -273,6 +279,8 @@ int main() {
 ```
 
 ### Compile-Time Feature Guards
+
+The `__CUDA_ARCH__` macro lets you write different code paths for different GPU architectures at compile time. This is essential when using features only available on newer GPUs — like async memory copy on Ampere (sm_80+) or Tensor Cores on Volta (sm_70+). The compiler includes only the matching path for each target architecture.
 
 ```cuda
 #if __CUDA_ARCH__ >= 800
@@ -327,6 +335,8 @@ nvcc -arch=sm_80 -code=sm_80,sm_86,sm_90 kernel.cu
 By default, all device code must be in a **single compilation unit**. Separate compilation enables modular CUDA projects.
 
 ### The Problem
+
+This example shows two `.cu` files where `file2.cu` wants to call a `__device__` function defined in `file1.cu`. Without special flags, this fails because CUDA's default compilation mode inlines all device code within a single file — it can't resolve cross-file device function references.
 
 ```cuda
 // file1.cu
@@ -470,6 +480,8 @@ Application starts on GPU with sm_90 (Hopper)
 
 ### JIT Cache Management
 
+These environment variables control how the CUDA driver caches JIT-compiled kernels. Enabling the cache (default) means the slow PTX-to-SASS compilation only happens once per kernel per GPU type. Setting `CUDA_CACHE_DISABLE=1` forces recompilation every launch, which is useful for debugging JIT issues.
+
 ```bash
 # Environment variables controlling JIT cache
 export CUDA_CACHE_DISABLE=0           # Enable caching (default)
@@ -500,6 +512,8 @@ export CUDA_LOG_LEVEL=50  # Verbose CUDA driver logging
 ---
 
 ## 12. Advanced: `nvcc` Useful Flags
+
+These `nvcc` flags cover common compilation scenarios. `--keep` preserves intermediate PTX and cubin files for inspection. `--maxrregcount` limits register usage per thread to increase occupancy (at the risk of register spilling). `--use_fast_math` trades precision for speed on transcendental functions. `-lineinfo` adds source line information for profiling without the performance cost of full debug mode.
 
 ```bash
 # Verbose compilation — see all stages
@@ -584,6 +598,8 @@ graph LR
 
 ### Solution 1 (🟢 Inspecting PTX)
 
+This solution creates a simple kernel, compiles it to PTX with `--ptx`, then uses `grep` to find the key instructions: `ld.global` (load from GPU global memory), `add.f32` (single-precision float addition), and `st.global` (store to global memory). This is how you verify what instructions the compiler generates from your CUDA C++ code.
+
 ```bash
 # Source file: vecadd.cu
 cat > vecadd.cu << 'EOF'
@@ -610,12 +626,16 @@ Expected output:
 
 ### Solution 4 (🟡 Separate Compilation)
 
+This is the helper file containing a `__device__` function that will be called from a kernel in a separate file. The `__device__` qualifier means this function runs on the GPU and can only be called from other GPU code.
+
 ```cuda
 // helper.cu
 __device__ float square(float x) {
     return x * x;
 }
 ```
+
+This main file forward-declares the `square` function from helper.cu and calls it from a `__global__` kernel. With separate compilation (`-dc` flag), the linker resolves the cross-file device function reference — just like regular C++ linking works for CPU functions.
 
 ```cuda
 // main.cu
@@ -645,6 +665,8 @@ int main() {
     return 0;
 }
 ```
+
+This Makefile demonstrates the separate compilation workflow: each `.cu` file is compiled independently with the `-dc` (device compile) flag to produce relocatable device code, then all object files are linked together in the final `nvcc` step which handles both device linking and host linking.
 
 ```makefile
 # Makefile

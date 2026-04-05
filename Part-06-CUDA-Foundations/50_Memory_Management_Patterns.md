@@ -32,6 +32,8 @@ Unified Memory (UM) creates a **single address space** accessible from both CPU 
 
 ### Basic Usage
 
+This program demonstrates Unified Memory — CUDA's simplest memory model. A single `cudaMallocManaged` call creates memory accessible from both CPU and GPU. The CPU initializes the array directly (no `cudaMemcpy` needed), the GPU kernel doubles each value, and after synchronizing, the CPU reads the results through the same pointer. The driver automatically migrates data between CPU and GPU memory as needed.
+
 ```cuda
 #include <cstdio>
 
@@ -118,6 +120,8 @@ PINNED transfer path:
 
 ### Code Example — Pinned vs. Pageable Comparison
 
+This benchmark measures the transfer bandwidth difference between pageable (regular `malloc`) and pinned (`cudaMallocHost`) host memory. Pinned memory is locked in physical RAM so the GPU's DMA engine can transfer directly without the OS copying to a staging buffer first. On PCIe 4.0, pinned memory typically achieves ~24 GB/s vs ~12 GB/s for pageable — nearly 2× faster.
+
 ```cuda
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -196,6 +200,8 @@ Pinned memory reduces the OS's available pageable RAM. Over-allocating pinned me
 
 Zero-copy allows the GPU to **directly access host memory** over PCIe/NVLink without explicit `cudaMemcpy`. Useful when GPU touches data only once or accesses a tiny fraction.
 
+This program demonstrates zero-copy memory, where the GPU reads directly from host RAM over the PCIe bus without any explicit data transfer. A 1 GB array is allocated on the host with `cudaHostAlloc(Mapped)`, but the kernel only accesses 1024 scattered elements — far less than the full array. Zero-copy avoids transferring the entire dataset when only a small fraction is needed.
+
 ```cuda
 #include <cstdio>
 
@@ -247,6 +253,8 @@ int main() {
 
 CUDA 11.2+ introduced **stream-ordered memory allocation**. Instead of calling `cudaMalloc/cudaFree` (which synchronize the device), `cudaMallocAsync/cudaFreeAsync` use a pool and are **fully asynchronous**.
 
+This program demonstrates stream-ordered memory allocation using `cudaMallocAsync`. Unlike `cudaMalloc` which synchronizes the entire GPU, pool-based allocation is fully asynchronous — memory is grabbed from a pre-allocated pool with near-zero overhead. When freed with `cudaFreeAsync`, memory returns to the pool for reuse rather than being released back to the system.
+
 ```cuda
 #include <cstdio>
 
@@ -284,6 +292,8 @@ int main() {
 
 ### Pool Configuration
 
+These API calls configure the memory pool's behavior. Setting the release threshold tells the pool to keep up to a specified amount of freed memory cached for reuse, rather than returning it to the OS. This prevents expensive re-allocation when workloads repeatedly allocate and free similar-sized buffers.
+
 ```cuda
 cudaMemPool_t pool;
 cudaDeviceGetDefaultMemPool(&pool, 0);
@@ -300,6 +310,8 @@ cudaMemPoolSetAttribute(pool, cudaMemPoolAttrReleaseThreshold, &threshold);
 ## 6. `cudaMemPrefetchAsync` — Proactive Migration
 
 For Unified Memory, you can **prefetch pages** to a device before the kernel needs them, eliminating page faults.
+
+This snippet shows how to use `cudaMemPrefetchAsync` to proactively migrate Unified Memory pages before they are needed. Without prefetching, the first GPU access to each page triggers a costly page fault (~20-50 µs). Prefetching migrates pages in bulk via DMA, achieving near-explicit-transfer performance while keeping Unified Memory's simple programming model.
 
 ```cuda
 int N = 1 << 22;
@@ -325,6 +337,8 @@ printf("data[0] = %.0f\n", data[0]);
 ---
 
 ## 7. `cudaMemAdvise` — Hints for the Driver
+
+These `cudaMemAdvise` calls provide hints to the CUDA driver about expected access patterns for Unified Memory. `SetPreferredLocation` tells the driver where pages should reside, `SetAccessedBy` creates direct mappings to avoid migration, and `SetReadMostly` enables read-only replicas across devices. These hints are especially important for multi-GPU setups.
 
 ```cuda
 float* data;
@@ -374,6 +388,8 @@ graph TD
 ---
 
 ## 9. Practical Benchmark — UM vs. Explicit vs. Pinned
+
+This comprehensive benchmark compares three memory management strategies for a SAXPY operation: explicit transfers with pinned memory (fastest but most boilerplate), naive Unified Memory (simplest but incurs page faults), and Unified Memory with prefetch hints (balances simplicity and performance). The results show that adding `cudaMemPrefetchAsync` to Unified Memory nearly matches explicit transfer performance.
 
 ```cuda
 #include <cstdio>
@@ -517,6 +533,8 @@ int main() {
 
 ### Solution 1 (🟢 Unified Memory Basics)
 
+This minimal Unified Memory example allocates memory with `cudaMallocManaged`, initializes it on the CPU, runs a kernel to double each value, and verifies the results — all using a single pointer. The `cudaDeviceSynchronize` call is essential before CPU access to ensure the kernel has completed.
+
 ```cuda
 #include <cstdio>
 
@@ -546,6 +564,8 @@ int main() {
 ```
 
 ### Solution 4 (🟡 Memory Pool Performance)
+
+This benchmark measures the performance difference between standard `cudaMalloc/cudaFree` and pool-based `cudaMallocAsync/cudaFreeAsync` across 1000 allocation cycles. Standard allocation synchronizes the GPU on each call, while pool-based allocation is asynchronous and reuses memory. The pool approach is typically 10-100× faster for repeated allocations.
 
 ```cuda
 #include <cstdio>

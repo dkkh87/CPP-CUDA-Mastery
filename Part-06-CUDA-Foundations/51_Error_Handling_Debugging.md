@@ -147,6 +147,8 @@ int main() {
 }
 ```
 
+Compiling with `-g -G` includes debug symbols for both CPU and GPU code, enabling `compute-sanitizer` to report exact source file locations. Running the buggy program under `compute-sanitizer` reveals the out-of-bounds access, identifying the exact thread, block, and memory address involved.
+
 ```bash
 $ nvcc -g -G -o buggy buggy.cu
 $ compute-sanitizer ./buggy
@@ -158,6 +160,8 @@ $ compute-sanitizer ./buggy
 
 ### Example: Detecting Race Conditions
 
+This kernel contains two bugs: a missing `__syncthreads()` after initializing `counter` (so other threads may read it before thread 0 writes it), and a race condition where all threads increment `counter` without atomic operations. Multiple threads writing to the same location simultaneously produces undefined results.
+
 ```cuda
 __global__ void raceKernel() {
     __shared__ int counter;
@@ -167,6 +171,8 @@ __global__ void raceKernel() {
 }
 ```
 
+Running `compute-sanitizer` with the `--tool racecheck` flag detects the shared memory race condition and reports which threads' writes conflict with each other.
+
 ```bash
 $ compute-sanitizer --tool racecheck ./race_app
 ========= ERROR: Potential WAW (Write-After-Write) hazard detected
@@ -175,6 +181,8 @@ $ compute-sanitizer --tool racecheck ./race_app
 ```
 
 ### Build Flags for Debugging
+
+These `nvcc` flags control the tradeoff between debug information and performance. The `-g -G -O0` combination provides maximum debug accuracy but runs 10-50× slower. For profiling production code, use `-O3 -lineinfo` which keeps line-number information without disabling optimizations.
 
 ```bash
 # Debug build — unoptimized, full debug info
@@ -214,6 +222,8 @@ __global__ void debugKernel(const float* data, int N) {
 
 ### Practical Debugging Pattern
 
+This pattern limits `printf` output to a single thread (thread 0), preventing the output buffer from being overwhelmed by millions of threads printing simultaneously. Printing only from one thread also produces readable, ordered output for inspecting the first few values of an array.
+
 ```cuda
 __global__ void debugKernel(float* data, int N) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -248,6 +258,8 @@ NVIDIA Nsight (Visual Studio, Eclipse, or VS Code extension) provides:
 | **Nsight Debugger** | Interactive debugging — breakpoints, variable inspection | Thread state |
 
 ### Command-Line Profiling Quick Start
+
+These commands launch NVIDIA's profiling tools from the command line. Nsight Systems (`nsys`) captures a system-wide timeline showing CPU/GPU overlap and transfer timing. Nsight Compute (`ncu`) provides detailed per-kernel analysis including occupancy, memory throughput, and instruction mix — essential for identifying performance bottlenecks.
 
 ```bash
 # Nsight Systems — timeline profile
@@ -393,6 +405,8 @@ graph TD
 
 CUDA supports `assert()` in device code:
 
+CUDA supports `assert()` in device code for catching invariant violations during development. When an assertion fails, it halts the GPU and prints the file, line, block, and thread that triggered it. Assertions are automatically disabled in release builds compiled with `-DNDEBUG`, so they have zero production overhead.
+
 ```cuda
 #include <cassert>
 
@@ -421,6 +435,8 @@ Assertion `idx < N` failed.
 
 After a fatal CUDA error (e.g., `cudaErrorIllegalAddress`), the CUDA context is corrupted. No further CUDA operations will succeed until you reset:
 
+After a fatal 'sticky' error like `cudaErrorIllegalAddress`, the CUDA context is permanently corrupted — no subsequent CUDA calls will succeed. The only recovery is `cudaDeviceReset()`, which destroys the entire CUDA context and frees all GPU memory. All device pointers become invalid and must be re-allocated.
+
 ```cuda
 cudaError_t err = cudaDeviceSynchronize();
 if (err == cudaErrorIllegalAddress) {
@@ -435,6 +451,8 @@ if (err == cudaErrorIllegalAddress) {
 ---
 
 ## 11. Complete Debugging Example
+
+This complete program demonstrates defensive CUDA programming. Every API call is wrapped in `CUDA_CHECK`, the kernel includes bounds checking and handles invalid input gracefully (printing a warning for negative values instead of crashing), and results are verified against expected values. A deliberately injected bad value (`h_in[42] = -1.0f`) tests the error handling path.
 
 ```cuda
 #include <cstdio>
@@ -590,6 +608,8 @@ graph LR
 
 ### Solution 1 (🟢 Host Pointer Bug)
 
+This solution shows the corrected version that allocates memory on the GPU with `cudaMalloc` instead of passing a CPU pointer to a kernel. The GPU cannot access CPU memory directly (without special setup), so passing a `malloc`'d pointer causes a crash or silent corruption.
+
 ```cuda
 #include <cstdio>
 
@@ -629,6 +649,8 @@ int main() {
 ```
 
 ### Solution 3 (🟡 Race Condition Fix)
+
+This solution fixes the shared memory race condition by adding `__syncthreads()` barriers between write and read phases. After all threads write to `smem`, the barrier ensures every write is complete before any thread reads from it. Thread 0 then safely computes the sum sequentially, avoiding the original multi-thread write conflict.
 
 ```cuda
 #include <cstdio>
