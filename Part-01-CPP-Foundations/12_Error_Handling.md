@@ -45,6 +45,9 @@ failures.
 - **Clarity** — make error paths explicit and readable.
 
 ### How
+
+These two snippets show the core patterns. The `try`/`catch` block handles exceptions thrown during file reading, while `std::optional` returns a value-or-nothing result that the caller checks explicitly — no exceptions involved.
+
 ```cpp
 // Exceptions
 try {
@@ -63,6 +66,8 @@ if (result) use(*result);
 ## Code Examples
 
 ### Example 1 — Basic Exception Handling
+
+This example shows how to throw and catch exceptions in C++. The `divide` function throws `std::invalid_argument` on division by zero, and `parse_positive_int` can throw multiple exception types. The `main` function demonstrates catching specific exception types, catching by base class, and using a catch-all (`...`) handler.
 
 ```cpp
 // basic_exceptions.cpp
@@ -120,6 +125,8 @@ int main() {
 
 ### Example 2 — RAII + Exceptions = Safe Resource Management
 
+This example demonstrates why RAII (Resource Acquisition Is Initialization) is essential with exceptions. The `DatabaseConnection` and `vector` are created on the stack, so when an exception is thrown mid-function, the C++ runtime automatically destroys them during stack unwinding — guaranteeing cleanup without any explicit error-handling code.
+
 ```cpp
 // raii_exceptions.cpp
 #include <iostream>
@@ -169,6 +176,8 @@ int main() {
 ```
 
 ### Example 3 — noexcept Specification
+
+This example shows how the `noexcept` specifier tells the compiler (and callers) that a function will never throw. This matters most for move constructors: when a move is `noexcept`, `std::vector` can safely move elements during reallocation instead of copying them, resulting in significantly better performance.
 
 ```cpp
 // noexcept_demo.cpp
@@ -235,6 +244,8 @@ int main() {
 
 ### Example 4 — Error Codes vs Exceptions
 
+This example compares two error-handling approaches side by side. The error-code style returns a struct with both the result and an error enum, requiring the caller to check every return. The exception style keeps the happy path clean but uses `try`/`catch` for failures. Both are valid — the choice depends on how common errors are and whether you need predictable performance.
+
 ```cpp
 // error_codes_vs_exceptions.cpp
 #include <iostream>
@@ -296,6 +307,8 @@ int main() {
 
 ### Example 5 — std::optional (C++17)
 
+This example uses `std::optional` to represent functions that might not return a value — like looking up a user that doesn't exist or dividing by zero. Instead of throwing an exception, the function returns `std::nullopt`, and the caller checks with `if (result)` or uses `value_or()` for a default. This is ideal for expected "not found" cases.
+
 ```cpp
 // optional_demo.cpp
 #include <iostream>
@@ -356,6 +369,8 @@ int main() {
 ```
 
 ### Example 6 — std::expected (C++23)
+
+This example uses `std::expected<T, E>` to return either a successful value or a typed error — combining the explicitness of error codes with the ergonomics of `optional`. Unlike `optional`, the caller gets a meaningful `MathError` enum explaining what went wrong, making this pattern ideal for composable error pipelines.
 
 ```cpp
 // expected_demo.cpp  (requires C++23 or <tl/expected.hpp> for older compilers)
@@ -528,6 +543,8 @@ validate it's positive, compute its square root. Propagate errors through the ch
 
 ### Solution 1
 
+This solution implements a `safe_div` function that throws `std::invalid_argument` when the divisor is zero. The `main` function wraps both a valid and an invalid call inside a single `try` block — the exception from the second call halts execution and jumps to the `catch` handler.
+
 ```cpp
 #include <iostream>
 #include <stdexcept>
@@ -548,6 +565,8 @@ int main() {
 ```
 
 ### Solution 2
+
+This solution uses `std::optional<int>` to return either the found index or nothing. The caller tests the result with `if (idx)` and dereferences with `*idx` — no exceptions, no sentinel values like `-1`, just a clean "value or empty" pattern.
 
 ```cpp
 #include <iostream>
@@ -575,6 +594,8 @@ int main() {
 ```
 
 ### Solution 3
+
+This solution creates a custom `FileError` exception class that extends `std::runtime_error` with an additional `path()` accessor. This lets catch handlers extract both a human-readable message and the offending file path, which is more informative than a generic error string.
 
 ```cpp
 #include <iostream>
@@ -605,6 +626,8 @@ int main() {
 ```
 
 ### Solution 4
+
+This solution builds a `DynString` class with a `noexcept` move constructor. When `std::vector` reallocates, it will use moves instead of copies for `noexcept`-moveable types, which is much faster because it just swaps pointers rather than allocating new memory and copying data.
 
 ```cpp
 #include <iostream>
@@ -664,6 +687,8 @@ int main() {
 ```
 
 ### Solution 5
+
+This solution chains three operations (parse → validate → sqrt) using a simplified `Expected` type that mimics `std::expected`. Each step returns either a valid `double` or a `string` error. The pipeline lambda short-circuits on the first failure, propagating the error without exceptions.
 
 ```cpp
 #include <iostream>

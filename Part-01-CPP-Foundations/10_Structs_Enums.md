@@ -36,6 +36,9 @@ padding is critical for serialization, network protocols, and cache optimization
 - **Bitfields** — pack boolean flags into minimal space.
 
 ### How
+
+Here is the minimal syntax for declaring a struct and a scoped enum. The struct groups two `double` values into a single `Point` type, while `enum class` defines a type-safe set of named constants.
+
 ```cpp
 struct Point { double x, y; };          // aggregate type
 enum class Color { Red, Green, Blue };  // scoped enum
@@ -46,6 +49,8 @@ enum class Color { Red, Green, Blue };  // scoped enum
 ## Code Examples
 
 ### Example 1 — Basic Struct
+
+This example defines an `Employee` struct that bundles a name, ID, and salary together. It shows two ways to create a struct: brace initialization (all at once) and field-by-field assignment. The `print()` member function demonstrates that structs in C++ can have methods, not just data.
 
 ```cpp
 // basic_struct.cpp
@@ -80,6 +85,8 @@ int main() {
 
 ### Example 2 — Aggregate Initialization & Designated Initializers (C++20)
 
+This program shows two styles of struct initialization. The C++11 positional style fills fields in order, while C++20 designated initializers let you name each field explicitly (e.g., `.width = 3840`), making the code self-documenting. Any fields you skip keep their default values.
+
 ```cpp
 // designated_init.cpp
 #include <iostream>
@@ -110,6 +117,8 @@ int main() {
 ```
 
 ### Example 3 — Memory Padding and Alignment
+
+This example reveals how the compiler inserts hidden padding bytes inside structs to keep each member aligned to its natural boundary. By reordering the same members (largest first), `Packed` saves 4 bytes over `Padded`. The `#pragma pack(1)` version forces zero padding but may hurt performance. Use `sizeof` and `offsetof` to inspect the actual layout.
 
 ```cpp
 // padding.cpp
@@ -157,6 +166,8 @@ int main() {
 
 ### Example 4 — enum vs enum class
 
+This code compares classic `enum` with the safer `enum class` introduced in C++11. Classic enums leak their names into the surrounding scope and silently convert to integers, which can cause subtle bugs. `enum class` requires qualified names (e.g., `Color::Red`) and forbids implicit conversion, catching mistakes at compile time.
+
 ```cpp
 // enum_comparison.cpp
 #include <iostream>
@@ -188,6 +199,8 @@ int main() {
 ```
 
 ### Example 5 — Bitfield Enums for Flags
+
+This example uses an `enum class` with power-of-two values to represent combinable permission flags (Read, Write, Execute). Because `enum class` blocks implicit conversion, we overload the `|` and `&` operators to combine and test flags while keeping full type safety. The `has_flag` helper checks whether a specific permission is set.
 
 ```cpp
 // bitflags.cpp
@@ -232,6 +245,8 @@ int main() {
 ```
 
 ### Example 6 — Struct vs Class
+
+This example illustrates the only real difference between `struct` and `class` in C++: the default access level. `Point` is a struct with all-public fields — ideal for plain data. `Circle` is a class with a private `radius_` and a constructor that enforces a non-negative value, demonstrating when you need controlled access through an interface.
 
 ```cpp
 // struct_vs_class.cpp
@@ -354,6 +369,8 @@ it to eliminate padding and write a function to serialize/deserialize to/from a 
 
 ### Solution 1
 
+This solution defines a `Student` struct and a free function that prints it by const reference. It also demonstrates C++20 designated initializers as a second way to construct the struct.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -379,6 +396,8 @@ int main() {
 
 ### Solution 2
 
+This solution creates a scoped `Weekday` enum and a function that checks if a given day is Saturday or Sunday. Because `enum class` is used, comparisons between unrelated types are caught at compile time.
+
 ```cpp
 #include <iostream>
 
@@ -399,6 +418,8 @@ int main() {
 
 ### Solution 3
 
+This solution defines five structs with identical members arranged in different orders to demonstrate how member ordering affects total struct size due to padding. Notice that `struct E` is 24 bytes while others are 16 — simply because `int` sits before `double`, forcing extra alignment padding.
+
 ```cpp
 #include <iostream>
 
@@ -418,6 +439,8 @@ int main() {
 ```
 
 ### Solution 4
+
+This solution implements a `FileMode` flags enum backed by `uint8_t`. Operator overloads for `|` and `&` let you combine and test flags naturally (e.g., `Read | Binary`), while keeping `enum class` type safety so you can't accidentally mix file modes with unrelated integers.
 
 ```cpp
 #include <iostream>
@@ -451,6 +474,8 @@ int main() {
 ```
 
 ### Solution 5
+
+This solution defines a packed network packet header with `#pragma pack(1)` to eliminate all padding, then uses `memcpy` to serialize it to a byte array and deserialize it back. The `static_assert` ensures the struct is exactly 8 bytes, which is critical for binary protocol correctness.
 
 ```cpp
 #include <iostream>

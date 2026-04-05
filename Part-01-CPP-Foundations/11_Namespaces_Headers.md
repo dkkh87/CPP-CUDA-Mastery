@@ -40,6 +40,9 @@ Key rules governing this system:
 - Ensure **correctness** via ODR compliance.
 
 ### How
+
+This snippet shows the basic pattern: a header file uses `#pragma once` to prevent double-inclusion and wraps its declarations inside a `namespace` to avoid name collisions with other code.
+
 ```cpp
 // math/vector.hpp
 #pragma once
@@ -54,6 +57,8 @@ namespace math {
 ## Code Examples
 
 ### Example 1 — Namespaces Basics
+
+This example defines two namespaces (`graphics` and `audio`) that each contain a function named `draw()`. Without namespaces these names would collide; with them, you use qualified names like `graphics::draw()` to pick the right one. The code also shows `using` declarations and directives for importing names into the current scope.
 
 ```cpp
 // namespaces.cpp
@@ -90,6 +95,8 @@ int main() {
 
 ### Example 2 — Nested Namespaces (C++17)
 
+This example demonstrates C++17's compact nested-namespace syntax (`company::product::detail`), which replaces deeply indented brace nesting. It also introduces namespace aliases (`namespace cp = company::product`) as a convenient shorthand for long qualified names.
+
 ```cpp
 // nested_namespaces.cpp
 #include <iostream>
@@ -124,6 +131,8 @@ int main() {
 
 ### Example 3 — Anonymous Namespaces (Internal Linkage)
 
+An anonymous namespace makes everything inside it visible only within the current translation unit (source file). This is the modern C++ replacement for the `static` keyword and works for functions, variables, and types alike — preventing linker conflicts with identically named symbols in other files.
+
 ```cpp
 // anonymous_ns.cpp
 #include <iostream>
@@ -157,6 +166,8 @@ int main() {
 ```
 
 ### Example 4 — Header Organization with Include Guards
+
+The header file below declares a `Vector3` struct and several functions inside the `math` namespace. The `#ifndef`/`#define` include guard prevents the header from being processed twice in the same translation unit. Functions defined in the header are marked `inline` to comply with the One Definition Rule, while `cross()` is only declared here and defined in the `.cpp` file.
 
 ```cpp
 // === math/vector.hpp ===
@@ -193,6 +204,8 @@ inline std::ostream& operator<<(std::ostream& os, const Vector3& v) {
 #endif  // MATH_VECTOR_HPP
 ```
 
+This implementation file provides the definition for `cross()` that was only declared in the header. It includes the header and reopens the `math` namespace to add the function body.
+
 ```cpp
 // === math/vector.cpp ===
 #include "math/vector.hpp"
@@ -209,6 +222,8 @@ Vector3 cross(const Vector3& a, const Vector3& b) {
 
 }  // namespace math
 ```
+
+The main file includes the header to access all `math` namespace declarations, then calls `dot`, `cross`, and `length` to demonstrate that the multi-file project links together correctly.
 
 ```cpp
 // === main.cpp ===
@@ -232,6 +247,8 @@ int main() {
 
 ### Example 5 — Forward Declarations
 
+This header forward-declares `db::Connection` instead of including its full header. Because `UserService` only stores a pointer to `Connection`, a forward declaration is sufficient and avoids pulling in the entire database header — speeding up compilation and reducing coupling.
+
 ```cpp
 // forward_decl.hpp
 #pragma once
@@ -254,6 +271,8 @@ public:
 
 }  // namespace app
 ```
+
+This implementation file provides the full `db::Connection` class definition and the `UserService` method bodies. The full definition is needed here because the code calls `conn_->execute()`, which requires knowing the class layout — something a forward declaration alone cannot provide.
 
 ```cpp
 // forward_decl.cpp
@@ -291,6 +310,8 @@ int main() {
 ```
 
 ### Example 6 — using Declarations vs Directives
+
+This example contrasts `using` declarations (importing a single name like `util::to_upper`) with `using` directives (importing an entire namespace). The declaration form is safer and preferred; the directive form is acceptable in `.cpp` files within a limited scope but should never appear in header files.
 
 ```cpp
 // using_demo.cpp
@@ -427,6 +448,8 @@ moving the definition to a `.cpp` file.
 
 ### Solution 1
 
+This solution puts a `Circle` struct and an `area()` function inside a `geometry` namespace, then calls them from `main()` using fully qualified names to avoid any ambiguity.
+
 ```cpp
 #include <iostream>
 #include <cmath>
@@ -449,6 +472,8 @@ int main() {
 
 ### Solution 2
 
+The header defines a `clamp` function template inside a traditional `#ifndef` include guard. Because it's a template, the full definition can live in the header without causing ODR violations — each translation unit gets its own instantiation.
+
 ```cpp
 // utils.hpp
 #ifndef UTILS_HPP
@@ -461,6 +486,8 @@ constexpr T clamp(T value, T lo, T hi) {
 
 #endif  // UTILS_HPP
 ```
+
+The main file includes `utils.hpp` and tests the `clamp` function with values that fall below, above, and within the specified range.
 
 ```cpp
 // main.cpp
@@ -476,6 +503,8 @@ int main() {
 
 ### Solution 3
 
+The header uses `#pragma once` and declares a `Calculator` class with method signatures only — no definitions. This keeps the header lightweight and hides implementation details from files that include it.
+
 ```cpp
 // calculator.hpp
 #pragma once
@@ -490,6 +519,8 @@ public:
 };
 ```
 
+The implementation file includes the header and provides the function bodies for all `Calculator` methods. Changes here don't require recompiling files that only include the header.
+
 ```cpp
 // calculator.cpp
 #include "calculator.hpp"
@@ -499,6 +530,8 @@ double Calculator::sub(double a, double b) { return a - b; }
 void Calculator::store(double val) { memory_ = val; }
 double Calculator::recall() const { return memory_; }
 ```
+
+The main file includes only the header, creates a `Calculator`, and exercises the `add`, `store`, and `recall` methods. The compile command links both `.cpp` files together.
 
 ```cpp
 // main.cpp
@@ -516,6 +549,8 @@ int main() {
 ```
 
 ### Solution 4
+
+This solution creates a deeply nested namespace `company::math::linalg` using C++17 syntax and then uses a namespace alias (`namespace linalg = ...`) inside `main()` to keep usage concise. The `Matrix4x4::identity()` static factory method returns an identity matrix.
 
 ```cpp
 #include <iostream>
@@ -541,6 +576,8 @@ int main() {
 ```
 
 ### Solution 5
+
+This solution shows what an ODR violation looks like (a non-inline function defined in a header included by multiple translation units) and two ways to fix it: marking the function `inline`, or moving its definition to a `.cpp` file and keeping only the declaration in the header.
 
 ```cpp
 // BAD: helper.hpp with non-inline function definition
