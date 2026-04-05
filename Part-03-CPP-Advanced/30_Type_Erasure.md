@@ -179,6 +179,8 @@ graph LR
     B --> E["SerializeVisitor → string"]
 ```
 
+This example implements the visitor pattern using `std::variant` and `std::visit`. Three different visitors (area calculation, serialization, and scaling) operate on a closed set of shape types. The `overloaded` helper lets you write multiple lambdas as a single visitor — each lambda handles one shape type, and the compiler ensures every type is covered.
+
 ```cpp
 #include <variant>
 #include <cmath>
@@ -241,6 +243,8 @@ int main() {
 ---
 
 ## `std::optional` — Nullable Value Types
+
+`std::optional<T>` represents a value that may or may not be present, replacing error-prone patterns like returning `-1` or `nullptr` as sentinel values. This example shows parsing integers safely, expressing optional struct fields (like a user's email), and using `value_or` for defaults. It's stack-allocated with no heap overhead, making intent explicit in the type system.
 
 ```cpp
 #include <optional>
@@ -308,6 +312,8 @@ int main() {
 ---
 
 ## Virtual Dispatch vs Static Dispatch — Performance
+
+This benchmark compares two ways to achieve polymorphism: virtual functions (using inheritance and vtable pointers) versus `std::variant` with `std::visit` (static dispatch). Virtual dispatch scatters objects across the heap via `unique_ptr`, causing cache misses. Variant stores objects inline in contiguous memory, which is typically 2–5× faster for tight loops over large collections.
 
 ```cpp
 #include <chrono>
@@ -420,6 +426,8 @@ classDiagram
     Concept <|-- Model
 ```
 
+This implements the classic type erasure pattern. The `Drawable` class can store *any* type that has a `draw()` method — without requiring those types to inherit from a common base class. Internally, it uses a hidden `Concept`/`Model` hierarchy: the templated `Model<T>` wraps the concrete type and forwards calls through a virtual interface, while the outer class provides value semantics (copy, move) to the user.
+
 ```cpp
 #include <iostream>
 #include <memory>
@@ -516,6 +524,8 @@ graph TD
 
 ## Connection to GPU Programming
 
+This shows how `std::variant` can model a GPU kernel dispatch system. Different kernel types (matrix multiply, convolution, reduction) have different parameter structs, and `std::visit` selects the correct launch logic based on the active type. This pattern is used in ML frameworks to build heterogeneous work queues that batch different operations before dispatching them to the GPU.
+
 ```cpp
 #include <variant>
 #include <vector>
@@ -575,6 +585,8 @@ int main() {
 
 ### Solution 1: Safe Square Root
 
+This function returns `std::optional<double>` — it gives back the square root if the input is non-negative, or `std::nullopt` for negative inputs. The caller checks `has_value()` or uses `value_or()` for a default, avoiding the need for exceptions or sentinel values like `-1`.
+
 ```cpp
 #include <optional>
 #include <cmath>
@@ -595,6 +607,8 @@ int main() {
 ```
 
 ### Solution 3: JSON-like Value Type
+
+This models a JSON value as a `std::variant` holding null, bool, int, double, or string. The `to_json` function uses the `overloaded` lambda pattern with `std::visit` to serialize each type to its JSON representation. The compiler guarantees every variant alternative is handled — adding a new type without a visitor case will produce a compile error.
 
 ```cpp
 #include <variant>

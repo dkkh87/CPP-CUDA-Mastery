@@ -50,6 +50,8 @@ timeline
 
 ### C++11: Single-Expression Functions
 
+In C++11, `constexpr` functions were very limited — they could only contain a single `return` statement. This meant no loops, no local variables, and no branching. Despite the restriction, it was the first step toward moving computation from runtime to compile time.
+
 ```cpp
 // C++11: constexpr functions had severe restrictions
 constexpr int square_11(int x) {
@@ -58,6 +60,8 @@ constexpr int square_11(int x) {
 ```
 
 ### C++14: Loops, Variables, and Control Flow
+
+C++14 lifted the single-expression restriction, allowing `constexpr` functions to use loops, local variables, and multiple statements. This example computes factorials using a `for` loop entirely at compile time, verified by `static_assert`.
 
 ```cpp
 constexpr int factorial(int n) {
@@ -72,6 +76,8 @@ static_assert(factorial(0) == 1,   "factorial(0) must be 1");
 ```
 
 ### C++17: `if constexpr` — Compile-Time Branching
+
+`if constexpr` evaluates conditions at compile time and discards the untaken branches entirely — they don't even need to compile for the given type. This is essential for writing a single template function that behaves differently depending on the type, without requiring template specializations.
 
 ```cpp
 #include <type_traits>
@@ -97,6 +103,8 @@ int main() {
 ```
 
 ### C++20: Expanded `constexpr` Capabilities
+
+C++20 dramatically expanded what `constexpr` can do — including dynamic memory allocation (`std::vector`) at compile time. This example uses the Sieve of Eratosthenes to compute prime numbers in a `constexpr` vector, then transfers the results into a fixed-size `std::array` that gets baked directly into the binary.
 
 ```cpp
 #include <vector>
@@ -176,6 +184,8 @@ int main() {
 
 ### `if consteval` (C++23)
 
+`if consteval` lets a single function choose different implementations depending on whether it's being called at compile time or runtime. Here, `fast_sqrt` uses a Newton's method approximation when evaluated by the compiler, but switches to the hardware-accelerated `std::sqrt` at runtime for maximum performance in both contexts.
+
 ```cpp
 #include <cmath>
 #include <iostream>
@@ -247,6 +257,8 @@ graph TD
 
 ## Compile-Time String Processing
 
+This example demonstrates two common string operations performed entirely at compile time: hashing (using the FNV-1a algorithm) and splitting a CSV string into tokens. Because these run at compile time, the results are embedded directly into the binary with zero runtime overhead — useful for fast string lookups and compile-time parsing of configuration data.
+
 ```cpp
 #include <string_view>
 #include <array>
@@ -305,6 +317,8 @@ int main() {
 
 ## `std::source_location` for Debugging
 
+`std::source_location` is a C++20 feature that automatically captures the file name, line number, and function name of the caller — no macros like `__FILE__` or `__LINE__` needed. This example shows a `log` function and a `validate` function that both automatically report where they were called from, making debug output much more informative.
+
 ```cpp
 #include <iostream>
 #include <string_view>
@@ -338,6 +352,8 @@ int main() {
 ---
 
 ## Practical: Compile-Time Lookup Tables
+
+This generates a 256-entry sine lookup table entirely at compile time using a Taylor series approximation. The resulting array is embedded directly in the binary, so at runtime there is zero computation — just a memory read. This pattern is widely used in embedded systems and GPU programming where fast trigonometric lookups are needed without calling `std::sin`.
 
 ```cpp
 #include <array>
@@ -382,6 +398,8 @@ int main() {
 
 ## Practical: Compile-Time Config Validation
 
+This uses `consteval` to validate application configuration at compile time. If any field is out of range (e.g., an invalid port number or unrecognized log level), the program won't compile at all. This catches configuration errors before the code ever runs, turning runtime crashes into compile-time errors.
+
 ```cpp
 #include <string_view>
 #include <stdexcept>
@@ -423,6 +441,8 @@ static_assert(config.port == 8080);
 ---
 
 ## Static Reflection Preview (C++26)
+
+This is a preview of upcoming C++26 reflection capabilities (not yet standardized). The idea is that the compiler will let you iterate over a struct's members at compile time, enabling automatic serialization, pretty-printing, and ORM mapping without macros or boilerplate. The code below is commented out since the syntax is still a proposal.
 
 ```cpp
 // NOTE: C++26 proposal — not yet standardized. Syntax is illustrative.
@@ -474,6 +494,8 @@ void print_members(const T& obj) {
 
 ### Solution 1: Compile-Time Fibonacci
 
+This `constexpr` function computes Fibonacci numbers using an iterative approach (not recursion) to avoid deep call stacks. The `static_assert` lines prove the results are computed at compile time — if any assertion fails, the program won't compile.
+
 ```cpp
 #include <cstdint>
 #include <iostream>
@@ -501,6 +523,8 @@ int main() {
 ```
 
 ### Solution 3: Compile-Time Email Validation
+
+This `consteval` function checks basic email format rules (must contain `@` followed by `.`, with valid positions) entirely at compile time. Because it uses `consteval` rather than `constexpr`, it is impossible to call with a runtime string — every email checked by this function is guaranteed to be validated before the program runs.
 
 ```cpp
 #include <string_view>
