@@ -65,6 +65,8 @@ graph LR
 
 ## auto, decltype, and Type Deduction
 
+This code shows how `auto` lets the compiler figure out variable types for you, removing the need to spell out long type names like `std::map<std::string, std::vector<int>>::iterator`. The `decltype` keyword mirrors the exact type of an expression, and C++14's generic lambdas with `auto` parameters work like lightweight templates — one lambda handles multiple types without repeating code.
+
 ```cpp
 #include <vector>
 #include <map>
@@ -133,6 +135,8 @@ int main() {
 
 ## Lambda Expressions — C++11 to C++14
 
+This code demonstrates lambda expressions — anonymous functions you can define right where you need them, replacing verbose functor classes from older C++. It covers capture-by-value, mutable lambdas that maintain state across calls, C++14 init captures that let you move `unique_ptr` into a lambda, and C++14 generic lambdas with `auto` parameters that work like mini-templates.
+
 ```cpp
 #include <algorithm>
 #include <iostream>
@@ -189,6 +193,8 @@ stateDiagram-v2
     Expired --> [*]
 ```
 
+This code demonstrates the three C++11 smart pointers that replace manual `new`/`delete`. `unique_ptr` provides sole ownership and transfers it via `std::move`, `shared_ptr` uses atomic reference counting so multiple owners can share a resource, and `weak_ptr` observes without extending lifetime — preventing cyclic reference leaks.
+
 ```cpp
 #include <memory>
 #include <iostream>
@@ -213,6 +219,8 @@ int main() {
 ---
 
 ## constexpr — Compile-Time Computation
+
+This code shows how `constexpr` shifts computation from runtime to compile time. C++11 restricted `constexpr` functions to a single return statement, so `fact_11` uses recursion. C++14 relaxed this limitation, allowing loops and local variables in `fact_14`, making compile-time code read like normal code. The `static_assert` calls prove the values are computed at compile time, and `constexpr` results can even set array sizes.
 
 ```cpp
 #include <iostream>
@@ -243,6 +251,8 @@ int main() {
 ---
 
 ## Variadic Templates and Parameter Packs
+
+This code shows how variadic templates let you write functions that accept any number of arguments of any type — a type-safe replacement for C's `printf`-style `va_args`. The `print` function uses recursive expansion (each call peels off the first argument and recurses on the rest), while `concat` uses the comma-operator expansion trick to process all arguments in a single pass.
 
 ```cpp
 #include <iostream>
@@ -276,6 +286,8 @@ int main() {
 ---
 
 ## std::chrono, nullptr, enum class, override/final, Range-for, Uniform Init
+
+This code showcases several smaller but impactful C++11 features in one example. `nullptr` eliminates the overload ambiguity that `NULL` (which is just `0`) caused. `enum class` prevents implicit int conversions that led to subtle bugs. `override`/`final` catch inheritance mistakes at compile time. Brace initialization `{}` rejects dangerous narrowing conversions. Range-for loops replace verbose iterator boilerplate. Finally, `std::chrono` provides type-safe time measurement, replacing error-prone C-style `time()` calls.
 
 ```cpp
 #include <chrono>
@@ -333,6 +345,8 @@ int main() {
 ---
 
 ## C++14 Additions Roundup
+
+This code rounds up the key C++14 polish features: return type deduction (`auto` on function returns removes redundant type declarations), generic lambda factories that return closures with `auto` parameters, variable templates for constants like `golden<T>`, digit separators (`7'900'000'000`) for readability, binary literals (`0b1010'0011`), and `std::make_unique` which finally gives `unique_ptr` a safe factory function matching `make_shared`.
 
 ```cpp
 #include <iostream>
@@ -393,6 +407,9 @@ Type-safe `log(LogLevel, args...)` with timestamps via `std::chrono`.
 ## Solutions
 
 ### Solution 1
+
+This solution builds a singly-linked list using `unique_ptr` to manage node ownership. Each node is created with `make_unique` and linked by moving the current head into the new node's `next` pointer, demonstrating how move semantics enable safe ownership transfer without any manual `delete` calls.
+
 ```cpp
 #include <memory>
 #include <iostream>
@@ -415,6 +432,9 @@ int main() {
 ```
 
 ### Solution 2
+
+This solution uses a C++14 generic lambda (with `auto` parameters) as a custom comparator for `std::sort`. The lambda first compares string lengths and breaks ties alphabetically, showing how lambdas replace verbose functor classes for inline sorting logic.
+
 ```cpp
 #include <algorithm>
 #include <iostream>
@@ -430,6 +450,9 @@ int main() {
 ```
 
 ### Solution 3
+
+This solution implements a move-aware dynamic array with a move constructor and move assignment operator, both marked `noexcept` so `std::vector` can use them during reallocation. The `push_back` takes an rvalue reference to steal resources from temporaries, and `std::move` is used throughout to transfer element ownership during buffer growth.
+
 ```cpp
 #include <iostream>
 #include <utility>
@@ -461,6 +484,9 @@ int main(){
 ```
 
 ### Solution 4
+
+This solution uses C++14's relaxed `constexpr` (which allows loops and local variables) to build a compile-time Fibonacci lookup table inside a `std::array`. The `static_assert` calls prove the values are computed entirely at compile time — no runtime cost at all.
+
 ```cpp
 #include <array>
 #include <iostream>
@@ -474,6 +500,9 @@ int main(){ for(int i=0;i<16;++i) std::cout<<"fib("<<i<<")="<<fib[i]<<"\n"; }
 ```
 
 ### Solution 5
+
+This solution combines variadic templates with `std::chrono` to build a type-safe logger. The comma-operator expansion trick `(void)X{0,(o<<args<<' ',0)...}` streams all arguments without recursion, and `std::chrono::system_clock` provides timestamps — replacing unsafe C-style `printf` with a modern, type-checked approach.
+
 ```cpp
 #include <iostream>
 #include <sstream>

@@ -45,6 +45,8 @@ close the gap between what programmers *think* and what they *write*.
 
 ### 1 — Structured Bindings
 
+Structured bindings let you unpack structs, pairs, tuples, and maps into named variables in a single declaration. This replaces the old pattern of accessing `.first`/`.second` or `std::get<0>()`, making code read more like Python-style unpacking while keeping full type safety.
+
 ```cpp
 #include <iostream>
 #include <map>
@@ -68,6 +70,8 @@ int main() {
 
 ### 2 — if / switch with Initializers
 
+C++17 lets you declare a variable inside an `if` or `switch` statement, scoping it exactly where it's needed. This eliminates the old problem of iterator variables leaking into the surrounding scope and pairs naturally with `lock_guard` for thread-safe lookups — the lock is held only for the duration of the `if` block.
+
 ```cpp
 #include <iostream>
 #include <map>
@@ -90,6 +94,8 @@ int main() { lookup(1); lookup(99); }
 ```
 
 ### 3 — std::optional / std::variant / std::any
+
+This code demonstrates three new vocabulary types. `std::optional` expresses "might not have a value" without sentinel hacks like returning `-1`. `std::variant` is a type-safe union that uses `std::visit` for pattern-matching dispatch, replacing unsafe raw unions. `std::any` holds any copyable type but should only be used when the type set is truly unknown at compile time.
 
 ```cpp
 #include <any>
@@ -130,6 +136,8 @@ int main() {
 
 ### 4 — if constexpr — Compile-Time Branching
 
+`if constexpr` evaluates conditions at compile time and completely discards the false branch, so it never gets compiled. This replaces the old SFINAE and tag-dispatch tricks that were hard to read and write. Here, `stringify` handles arithmetic types, strings, and triggers a compile error for anything else — all in clean, readable code.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -154,6 +162,8 @@ int main() {
 ```
 
 ### 5 — std::filesystem
+
+`std::filesystem` provides a portable, cross-platform API for file and directory operations, replacing platform-specific POSIX or Win32 calls. This code creates directories, writes files, recursively iterates directory trees, and inspects path components — all with clean, standard C++ that works on every major OS.
 
 ```cpp
 #include <filesystem>
@@ -181,6 +191,8 @@ int main() { demo_filesystem(); }
 ```
 
 ### 6 — Parallel STL Algorithms
+
+The Parallel STL lets you turn sequential algorithms into multi-core workloads by adding a single execution policy argument. `std::execution::seq` runs single-threaded, `par` adds multi-threading, and `par_unseq` enables both threading and SIMD vectorization. `std::reduce` and `std::transform_reduce` are the parallel-safe replacements for `std::accumulate`, which cannot be parallelized due to its strict left-to-right ordering.
 
 ```cpp
 #include <algorithm>
@@ -212,6 +224,8 @@ int main() {
 ```
 
 ### 7 — Fold Expressions
+
+Fold expressions let you reduce a variadic parameter pack into a single expression without writing recursive template specializations. Before C++17, summing a pack required a base case + recursive case generating O(N) template instantiations. Now `(args + ...)` does it in one line, and the comma-operator fold `((std::cout << args << " "), ...)` replaces the old `int[]` expansion trick.
 
 ```cpp
 #include <iostream>
@@ -246,6 +260,8 @@ int main() {
 ```
 
 ### 8 — CTAD, string_view, Nested Namespaces, Inline Variables, std::byte
+
+This code bundles five smaller C++17 features. Class Template Argument Deduction (CTAD) lets you write `std::pair p{1, 3.14}` without specifying `<int, double>`. `string_view` provides a zero-copy, non-owning reference to string data — ideal for function parameters. Nested namespaces (`A::B::C`) reduce indentation. `inline` variables are ODR-safe in headers. `std::byte` provides a type-safe alternative to `unsigned char` for raw memory operations.
 
 ```cpp
 #include <cstddef>
@@ -288,6 +304,8 @@ int main() {
 ```
 
 ### 9 — Guaranteed Copy Elision
+
+C++17 guarantees that prvalue expressions (like `Heavy{}`) are constructed directly in place — no copy or move constructor is ever called. This means you can return non-copyable, non-movable types from functions, which was impossible before C++17 even if the compiler would have optimized away the copy in practice. The deleted copy and move constructors prove that no copying or moving occurs.
 
 ```cpp
 #include <iostream>
@@ -391,6 +409,8 @@ to multiple handlers in a single call.
 
 ### S1 — min_max
 
+This solution uses `std::minmax_element` to find both extremes in a single pass, then returns them as a `std::pair`. The caller uses C++17 structured bindings (`auto [mn, mx] = ...`) to unpack the result into named variables, and CTAD lets `std::vector data{3, 7, 1, 9, 4}` deduce its element type automatically.
+
 ```cpp
 #include <algorithm>
 #include <iostream>
@@ -410,6 +430,8 @@ int main() {
 
 ### S2 — first_word
 
+This solution uses `std::string_view` to extract the first word without allocating any memory. The `find_first_not_of` and `find_first_of` calls locate word boundaries, and `substr` returns a new `string_view` pointing into the original data — demonstrating the zero-copy advantage over `std::string` for read-only string operations.
+
 ```cpp
 #include <iostream>
 #include <string_view>
@@ -427,6 +449,8 @@ int main() {
 ```
 
 ### S3 — Config Parser
+
+This solution combines `std::optional`, `std::variant`, and `std::string_view` to build a config line parser. It returns `std::nullopt` for malformed input, uses `std::variant<int, double, std::string>` to hold the parsed value in its correct type, and uses `if` with initializer (`if (auto r = ...; r)`) to scope the result cleanly — showing how multiple C++17 features compose together naturally.
 
 ```cpp
 #include <iostream>
