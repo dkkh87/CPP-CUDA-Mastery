@@ -56,6 +56,8 @@ occupancy, ILP, fused instructions, and eliminating branch divergence.
 
 ## Code Example 1 — Occupancy Calculator
 
+This program uses the CUDA Occupancy API (`cudaOccupancyMaxPotentialBlockSize` and `cudaOccupancyMaxActiveBlocksPerMultiprocessor`) to automatically determine the optimal block size for a simple SAXPY kernel. Instead of guessing the block size, we let the runtime inspect the kernel's register and shared-memory usage and solve for the configuration that maximizes occupancy. This demonstrates how to make launch configuration data-driven rather than hard-coded.
+
 ```cuda
 // occupancy_calc.cu — Query optimal block size via CUDA occupancy API
 #include <cstdio>
@@ -122,6 +124,8 @@ int main() {
 ```
 
 ## Code Example 2 — ILP: 1 Element vs 4 Elements per Thread
+
+This example compares two kernels: one where each thread processes a single element (ILP-1) and another where each thread processes four independent elements (ILP-4). By loading and computing on four values per thread, the ILP-4 version gives the warp scheduler more independent instructions to issue, hiding arithmetic and memory latency more effectively. The benchmark measures bandwidth achieved by each approach to quantify the benefit of instruction-level parallelism.
 
 ```cuda
 // ilp_comparison.cu — Demonstrate instruction-level parallelism benefit
@@ -215,6 +219,8 @@ int main() {
 
 ## Code Example 3 — Branch Divergence: Bad vs Good
 
+This code demonstrates the performance cost of branch divergence within a warp. The "divergent" kernel branches on `threadIdx.x & 1`, causing every other thread in a warp to take a different path — the hardware must serialize both paths, effectively halving throughput. The "uniform" kernel branches on `warpId` instead, so all 32 threads within each warp follow the same path, eliminating divergence entirely. The benchmark times both versions to show the real-world impact.
+
 ```cuda
 // branch_divergence.cu — Measure divergence cost and restructured version
 #include <cstdio>
@@ -307,6 +313,8 @@ int main() {
 ```
 
 ## Code Example 4 — Loop Unrolling Comparison
+
+This example applies a 1D stencil (averaging a window of 9 neighbors) using three different loop strategies: a natural loop that the compiler may or may not unroll, a `#pragma unroll` version that hints the compiler to fully unroll, and a manually unrolled version with all additions written out explicitly. Unrolling eliminates loop-control overhead (branch, increment, compare) and exposes all loads as independent instructions, improving ILP. The benchmark compares all three to show when `#pragma unroll` matches manual unrolling.
 
 ```cuda
 // loop_unroll.cu — Compare no-unroll, pragma-unroll, and manual unroll
@@ -487,6 +495,8 @@ compute-bound or memory-bound, and propose the right optimization strategy.
 
 ### Solution 1 — Occupancy Query
 
+This solution iterates over four common block sizes (64, 128, 256, 512) and queries `cudaOccupancyMaxActiveBlocksPerMultiprocessor` for each one. It then computes and prints the achieved occupancy percentage, letting you see how block size affects the number of active warps the SM can schedule.
+
 ```cuda
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -528,6 +538,8 @@ For ILP-8, each thread loads/stores 8 elements — grid becomes `N/8/BLOCK`. On 
 GPUs, ILP-4 captures the majority of benefit; ILP-8 may hurt due to register pressure.
 
 ### Solution 3 — Divergence Profiling
+
+This command profiles the branch divergence example with Nsight Compute, collecting the `smsp__thread_inst_executed_pred_on` (instructions executed with predicate on) and `smsp__thread_inst_executed` (total instructions) metrics. Comparing the ratio of these two values reveals how many threads are actually active during execution — a ratio near 1.0 means no divergence, while 0.5 indicates half the warp is masked off.
 
 ```bash
 ncu --metrics smsp__thread_inst_executed_pred_on.sum,\

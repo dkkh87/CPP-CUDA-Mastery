@@ -60,6 +60,8 @@ Nsight Compute and Nsight Systems are NVIDIA's first-party GPU profiling tools, 
 
 ## Code Example 1 — Naive Matrix Multiply (Baseline)
 
+This is the simplest possible GPU matrix multiply: each thread computes one element of the output matrix C by iterating over an entire row of A and column of B. It serves as our profiling baseline. Because every thread reads B in a column-major pattern, memory accesses are uncoalesced, and there is zero data reuse between threads — making this kernel heavily memory-bound. We time it with CUDA events to establish the GFLOP/s starting point.
+
 ```cuda
 // file: matmul_v1_naive.cu
 #include <cstdio>
@@ -142,6 +144,8 @@ int main() {
 
 ### Profiling Commands for V1
 
+These commands compile the naive kernel and profile it with both Nsight tools. `nsys profile` captures a system-wide timeline showing CPU/GPU activity and memory transfers, while `ncu --set full` performs a deep-dive kernel analysis collecting all hardware counters including Speed-of-Light throughput, occupancy, and warp stall reasons.
+
 ```bash
 # Compile
 nvcc -O3 -arch=sm_80 -o matmul_v1 matmul_v1_naive.cu
@@ -169,6 +173,8 @@ ncu --set full -o matmul_v1_ncu ./matmul_v1
 ---
 
 ## Code Example 2 — Shared-Memory Tiled Multiply (Iteration 2)
+
+This optimized version loads 32×32 tiles of A and B into shared memory before computing, so each element from global memory is reused by 32 threads instead of being fetched repeatedly. The `__syncthreads()` calls ensure all threads finish loading a tile before any thread starts computing with it. This dramatically reduces DRAM traffic and demonstrates the classic tiling optimization that moves a kernel from memory-bound toward compute-bound on the roofline.
 
 ```cuda
 // file: matmul_v2_tiled.cu
@@ -263,6 +269,8 @@ int main() {
 }
 ```
 
+These commands compile the tiled kernel and profile it with Nsight Compute, then compare the V1 and V2 profiles side-by-side to see exactly which metrics improved from the tiling optimization.
+
 ```bash
 nvcc -O3 -arch=sm_80 -o matmul_v2 matmul_v2_tiled.cu
 ncu --set full -o matmul_v2_ncu ./matmul_v2
@@ -279,6 +287,8 @@ ncu --import matmul_v1_ncu.ncu-rep --import matmul_v2_ncu.ncu-rep --page details
 ---
 
 ## Code Example 3 — NVTX Annotations for Nsight Systems
+
+This example wraps each phase of a vector-add program (host allocation, device setup, kernel execution, result transfer) with NVTX range markers using `nvtxRangePushA` and `nvtxRangePop`. These annotations appear as labeled colored ranges in the Nsight Systems timeline, making it easy to see exactly how much wall time each logical phase consumes. NVTX has near-zero overhead and is the standard way to add application-level context to GPU profiling traces.
 
 ```cuda
 // file: nvtx_example.cu
@@ -348,6 +358,8 @@ int main() {
 }
 ```
 
+These commands compile the NVTX-annotated program (linking the NVTX library) and capture a timeline that includes both CUDA activity and the user-defined NVTX ranges, then print per-range timing statistics.
+
 ```bash
 # Compile with NVTX
 nvcc -O3 -arch=sm_80 -lnvToolsExt -o nvtx_example nvtx_example.cu
@@ -400,6 +412,8 @@ __global__ void matmul_vec(const float* __restrict__ A,
 }
 ```
 
+These commands compile the V3 kernel and profile it with Nsight Compute, specifically requesting the roofline chart section so you can visualize how the unrolling and `__restrict__` optimizations moved the kernel closer to the hardware ceiling.
+
 ```bash
 nvcc -O3 -arch=sm_80 -o matmul_v3 matmul_v3_vec.cu
 ncu --set full --section SpeedOfLight_HierarchicalSingleRooflineChart \
@@ -409,6 +423,8 @@ ncu --set full --section SpeedOfLight_HierarchicalSingleRooflineChart \
 ---
 
 ## Profiling Command Reference
+
+This is a quick-reference collection of the most useful Nsight Systems and Nsight Compute command-line invocations. It covers full tracing, JSON export for scripting, top-kernel summaries, single-kernel deep dives with launch filtering, report comparison, and roofline chart generation. Keep these handy as your go-to profiling cheat sheet.
 
 ```bash
 # ──────────────────────── Nsight Systems ────────────────────────
@@ -532,6 +548,9 @@ Starting from V3, apply further optimisations (double buffering, register tiling
 ## Solutions
 
 ### Solution 1
+
+This compiles the naive kernel, captures a system timeline, and prints a summary table of CUDA API call durations so you can identify whether the kernel or a memory copy dominates wall time.
+
 ```bash
 nvcc -O3 -arch=sm_80 -o matmul_v1 matmul_v1_naive.cu
 nsys profile --stats=true -o sol1 ./matmul_v1
@@ -540,6 +559,9 @@ nsys stats --report cuda_api_sum sol1.nsys-rep
 Typical result: `cudaMemcpy` dominates wall time for small N; for N ≥ 1024, the kernel dominates. The `cuda_gpu_kern_sum` report shows `matmul_naive` is the single hottest kernel.
 
 ### Solution 2
+
+This runs a full Nsight Compute profile and filters the output for SOL (Speed-of-Light) and throughput lines, letting you instantly see the compute vs. memory SOL percentages that classify the kernel as memory-bound or compute-bound.
+
 ```bash
 ncu --set full ./matmul_v1 2>&1 | grep -E "SOL|Throughput"
 ```
@@ -551,6 +573,9 @@ Memory [%]:       67.8   ← memory SOL
 Since memory SOL >> compute SOL, the kernel is **memory-bound**.
 
 ### Solution 3
+
+This profiles both the V1 and V2 kernels separately, then uses Nsight Compute's import and comparison feature to output a CSV filtered for DRAM traffic, L2 cache, occupancy, and duration metrics — making it easy to see exactly what improved after tiling.
+
 ```bash
 ncu --set full -o v1 ./matmul_v1
 ncu --set full -o v2 ./matmul_v2
