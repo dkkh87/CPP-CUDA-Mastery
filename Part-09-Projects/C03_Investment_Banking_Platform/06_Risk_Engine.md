@@ -12,6 +12,8 @@ from hundreds of concurrent pricing threads.
 
 ## Architecture Insight
 
+This diagram shows the Risk Engine's internal data flow. Market data ticks feed into a thread pool that dispatches work to three parallel calculators — Greeks (sensitivities), VaR (tail-risk via Monte Carlo), and PnL (profit/loss accumulation). Results are aggregated under a scoped lock and moved into the final risk report.
+
 ```mermaid
 graph TD
     subgraph Market Data
@@ -91,6 +93,8 @@ Speed matters: risk calculations block trading decisions and must meet reporting
 ---
 
 ## Complete Implementation
+
+The full Risk Engine implementation below calculates Black-Scholes Greeks analytically, runs Monte Carlo VaR with 10,000 simulated paths using `std::async` for parallelism, and accumulates PnL atomically. It uses `std::scoped_lock` for safe concurrent portfolio access and move semantics to avoid copying large result vectors.
 
 ```cpp
 // risk_engine.cpp — Investment Banking Risk Engine
@@ -588,8 +592,9 @@ without synchronization. This is what makes parallel dispatch possible.
 | Full Report | End-to-end pipeline | No assertion failures |
 | Thread Scaling | Parallel speedup | Timing decreases with threads |
 
+Compile and run the complete risk engine with all self-tests. The `-pthread` flag is required because the engine uses `std::async` and `std::thread` for parallel Monte Carlo and Greeks calculations.
+
 ```bash
-g++ -std=c++20 -O2 -pthread risk_engine.cpp -o risk_engine && ./risk_engine
 ```
 
 ---

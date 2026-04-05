@@ -93,6 +93,8 @@ Declare variables close to first use, use `auto` for complex types, prefer `{}` 
 
 ### Example 1 — Type Sizes and Limits
 
+This program uses `sizeof` and `std::numeric_limits` to print the actual sizes and value ranges of each fundamental type on your system. Running it yourself reveals platform-specific details like whether `long` is 4 or 8 bytes.
+
 ```cpp
 #include <iostream>
 #include <limits>
@@ -123,6 +125,8 @@ int main() {
 ```
 
 ### Example 2 — Initialization Styles Compared
+
+This program demonstrates the four main ways to initialize variables in C++. Brace initialization (`{}`) is preferred in modern C++ because it prevents silent narrowing conversions — the compiler will reject `int x{3.14}` instead of quietly truncating the value.
 
 ```cpp
 #include <iostream>
@@ -157,6 +161,8 @@ int main() {
 ```
 
 ### Example 3 — const vs constexpr
+
+This program illustrates the difference between `const` (a value that cannot change after initialization, but may be computed at runtime) and `constexpr` (a value the compiler must be able to compute at compile time). Notice that a `constexpr` function can also be called at runtime with non-constant arguments.
 
 ```cpp
 #include <iostream>
@@ -195,6 +201,8 @@ int main() {
 
 ### Example 4 — Unsigned Overflow Trap
 
+This program shows how unsigned integer overflow wraps around silently (255 + 1 becomes 0), which is defined behavior in C++. It also demonstrates the dangerous case where subtracting from an unsigned zero produces a huge number instead of -1, a common source of bugs.
+
 ```cpp
 #include <iostream>
 #include <cstdint>
@@ -221,6 +229,8 @@ int main() {
 ```
 
 ### Example 5 — Literals and Digit Separators (C++14/17)
+
+This program showcases the different ways to write numeric literals in C++. Digit separators (`'`) make large numbers readable, and you can write values in hexadecimal (`0x`), binary (`0b`), or octal (`0`) notation. Suffixes like `f` and `LL` control the literal's type.
 
 ```cpp
 #include <iostream>
@@ -330,6 +340,8 @@ Write a program that takes a `double` value, reinterprets its bytes as an array 
 
 ### Solution 1: sizeof Explorer
 
+This solution uses `std::setw` and `std::left` from `<iomanip>` to format a neat table showing every fundamental type's size in bytes. It includes `size_t` and `ptrdiff_t`, which are important platform-dependent types used for sizes and pointer arithmetic.
+
 ```cpp
 #include <iostream>
 #include <iomanip>
@@ -358,6 +370,8 @@ int main() {
 
 ### Solution 2: Safe Input
 
+This solution validates user input with a loop that rejects invalid entries. If the user types a non-number or an out-of-range value, `cin.clear()` resets the error state and `cin.ignore()` discards the bad input so the program can ask again.
+
 ```cpp
 #include <iostream>
 #include <limits>
@@ -380,6 +394,8 @@ int main() {
 ```
 
 ### Solution 3: Overflow Detector
+
+This solution detects integer overflow *before* it happens by checking whether the result would exceed `INT_MAX` or go below `INT_MIN`. It returns `std::optional<int>` so callers receive `std::nullopt` on overflow instead of undefined behavior.
 
 ```cpp
 #include <iostream>
@@ -407,6 +423,8 @@ int main() {
 
 ### Solution 4: Binary Representation
 
+This solution prints an integer's binary representation by shifting each bit into the least-significant position and masking with `& 1`. It iterates from the most significant bit to the least, inserting spaces every 8 bits for readability.
+
 ```cpp
 #include <iostream>
 #include <climits>
@@ -430,6 +448,8 @@ int main() {
 ```
 
 ### Solution 5: Memory Inspector
+
+This solution uses `std::memcpy` to safely copy a `double` value's raw bytes into a `uint8_t` array, then prints each byte in hexadecimal. This reveals the IEEE 754 floating-point representation that the CPU actually stores in memory.
 
 ```cpp
 #include <iostream>
@@ -544,6 +564,9 @@ This chapter explored C++'s type system from fundamental types through type modi
 ## 11. Common Mistakes
 
 ### Mistake 1: Signed/Unsigned Comparison
+
+When you compare a signed integer to an unsigned integer, the signed value gets implicitly converted to unsigned. A negative number like `-1` becomes a very large positive value, causing the comparison to produce unexpected results.
+
 ```cpp
 int count = -1;
 unsigned int size = 10;
@@ -555,6 +578,9 @@ if (count < static_cast<int>(size)) { /* correct */ }
 ```
 
 ### Mistake 2: Floating-Point Equality
+
+Floating-point numbers cannot represent all decimal values exactly. Comparing them with `==` often fails because tiny rounding errors accumulate. Instead, check whether two values are close enough using an epsilon (small tolerance) value.
+
 ```cpp
 double a = 0.1 + 0.2;
 if (a == 0.3) {  // FALSE! 0.1+0.2 ≠ 0.3 in IEEE 754
@@ -567,6 +593,9 @@ if (std::abs(a - 0.3) < 1e-9) {
 ```
 
 ### Mistake 3: Not Initializing Variables
+
+Reading an uninitialized variable is undefined behavior — the variable holds whatever garbage was previously in that memory location. Always initialize variables when you declare them, using `{}` or `= 0` to start with a known value.
+
 ```cpp
 int sum;  // Uninitialized — contains garbage!
 for (int i = 0; i < 10; ++i) {
@@ -577,6 +606,9 @@ int sum{0};  // Or: int sum = 0;
 ```
 
 ### Mistake 4: Implicit Narrowing in Older Style
+
+Assigning a `double` to an `int` with `=` silently truncates the decimal part, losing data without any warning. Brace initialization catches this mistake at compile time, and `static_cast<int>()` makes the truncation explicit in your code.
+
 ```cpp
 double pi = 3.14159;
 int approx = pi;  // Silently truncates to 3 — data loss!

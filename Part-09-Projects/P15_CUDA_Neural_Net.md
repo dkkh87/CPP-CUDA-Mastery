@@ -32,6 +32,8 @@
 
 ## Network Architecture
 
+This diagram shows the three-layer fully connected neural network for MNIST digit classification. Input images (784 pixels) pass through two hidden layers with ReLU activation (256 and 128 neurons), then a 10-neuron output layer with softmax produces class probabilities. Cross-entropy loss measures prediction quality.
+
 ```mermaid
 graph LR
     A["Input<br/>784"] -->|W1 · x + b1| B["Hidden 1<br/>256"]
@@ -46,6 +48,8 @@ graph LR
 ---
 
 ## Forward / Backward Data-Flow
+
+This diagram traces data through both the forward and backward passes. The forward pass computes activations layer by layer (GEMM → ReLU → GEMM → ReLU → GEMM → Softmax → Loss). The backward pass propagates gradients in reverse using the chain rule — each layer's gradient depends on the transpose of its weight matrix and the derivative of its activation function.
 
 ```mermaid
 graph TB
@@ -257,6 +261,8 @@ __global__ void gemm_btrans(const float* __restrict__ A,   // M×K
 
 ## Step 3 — Activation Kernels
 
+These kernels implement ReLU and Sigmoid activation functions for both forward and backward passes. ReLU forward outputs `max(0, x)`, and its backward pass zeros out gradients where the input was negative. Sigmoid and its derivative are included for flexibility, though this network uses ReLU for hidden layers.
+
 ```cuda
 // activations.cuh
 #pragma once
@@ -390,6 +396,8 @@ __global__ void reduce_sum(const float* in, float* out, int n) {
 
 ## Step 5 — SGD Weight Update Kernel
 
+The SGD optimizer applies the simple update rule `W -= lr * dW` to every weight in parallel. The bias gradient kernel computes a column-wise sum over the batch dimension of the gradient matrix — each output neuron's bias gradient is the sum of that neuron's gradients across all samples in the mini-batch.
+
 ```cuda
 // optimizer.cuh
 #pragma once
@@ -417,6 +425,8 @@ __global__ void bias_gradient(const float* dZ, float* db,
 ---
 
 ## Step 6 — Network Struct and GPU Memory Manager
+
+This struct defines the network's layer configuration, allocates all GPU memory for weights, biases, activations, and gradients at construction time, and frees everything in the destructor. Pre-allocating all buffers avoids runtime `cudaMalloc` calls during training, which would add latency.
 
 ```cuda
 // neural_net.cuh
@@ -510,6 +520,8 @@ struct NeuralNet {
 
 ## Step 7 — Forward Pass
 
+The forward pass applies each layer sequentially: GEMM computes `Z = W·A + b`, then ReLU activates hidden layers and softmax produces output probabilities. The function stores intermediate pre-activations (`Z`) and activations (`A`) that the backward pass needs for gradient computation.
+
 ```cuda
 // forward.cuh
 #pragma once
@@ -559,6 +571,8 @@ void forward(NeuralNet& net) {
 
 ## Step 8 — Loss Computation
 
+This function computes the cross-entropy loss and its gradient in one step. The gradient `dL/dZ3 = P - Y_onehot` (predicted probabilities minus one-hot labels) is the starting point for backpropagation. A parallel reduction sums per-sample losses into a scalar for logging.
+
 ```cuda
 // compute_loss.cuh
 #pragma once
@@ -590,6 +604,8 @@ float compute_loss(NeuralNet& net) {
 ---
 
 ## Step 9 — Backward Pass
+
+The backward pass propagates gradients from the output layer back to the input. At each layer, it computes `dW = dZ · Aᵀ` (weight gradient), `db = sum(dZ)` (bias gradient), and `dA_prev = Wᵀ · dZ` (gradient for the layer below), then applies the ReLU derivative element-wise to get `dZ` for the next layer back.
 
 ```cuda
 // backward.cuh
@@ -652,6 +668,8 @@ void backward(NeuralNet& net) {
 
 ## Step 10 — SGD Update
 
+This function applies the SGD weight update to all three layers. It iterates through each layer, launching two kernels: one for weight updates (`W -= lr * dW`) and one for bias updates (`b -= lr * db`). Each kernel runs with enough threads to cover every parameter.
+
 ```cuda
 // update.cuh
 #pragma once
@@ -674,6 +692,8 @@ void sgd_step(NeuralNet& net, float lr) {
 ---
 
 ## Step 11 — Training Loop (main.cu)
+
+This is the complete training program. It loads MNIST data, initializes network weights with Xavier initialization (scaled random values), then runs the training loop: for each epoch, it shuffles data, processes mini-batches through forward → loss → backward → SGD update, and reports loss and accuracy per epoch.
 
 ```cuda
 // main.cu
@@ -840,6 +860,8 @@ int main(int argc, char** argv) {
 
 ## Build & Run
 
+Download the MNIST dataset (60K training + 10K test images), compile with cuRAND for weight initialization, and train. The model should reach ~97% test accuracy in about 20 epochs, with each epoch taking roughly 140ms on an A100 GPU.
+
 ```bash
 # Download MNIST (one-time)
 mkdir -p data && cd data
@@ -888,6 +910,8 @@ Test accuracy: 97.42% (9716/9984)
 
 ### 2. Gradient Check
 
+This function verifies that the analytical gradients from backpropagation match numerical gradients computed via finite differences. For each parameter, it perturbs the weight by ±ε, runs forward to compute loss, and checks that `(L(W+ε) - L(W-ε)) / 2ε` agrees with the analytical gradient within 1e-4 — the gold standard for debugging backprop implementations.
+
 ```cpp
 // Numerical gradient for parameter W[idx]:
 // (L(W+ε) - L(W-ε)) / (2ε)   should match analytical dW[idx]
@@ -929,6 +953,8 @@ accuracy must exceed 85 %.
 ## Performance Analysis
 
 ### Custom GEMM vs cuBLAS Benchmark
+
+This benchmark measures GFLOPS throughput of our custom tiled GEMM kernel versus NVIDIA's cuBLAS `cublasSgemm`. By running 100 iterations and timing with CUDA events, it reveals how much performance we leave on the table compared to cuBLAS's optimized implementation (which uses vectorized loads, double-buffering, and Tensor Core instructions).
 
 ```cuda
 // benchmark.cu — compare custom gemm_tiled against cublasSgemm
@@ -995,6 +1021,8 @@ void benchmark_gemm(int M, int K, int N, int iterations = 100) {
 > instructions that a simple tiled approach cannot match.
 
 ### Profiling with Nsight Compute
+
+Profile the neural network with Nsight Compute to identify bottlenecks. Key metrics include SM occupancy (how well we utilize GPU cores), shared memory bank conflicts (which slow down tiled GEMM), global memory throughput versus peak, and arithmetic intensity (whether we're compute-bound or memory-bound).
 
 ```bash
 ncu --set full -o profile ./cuda_nn ./data

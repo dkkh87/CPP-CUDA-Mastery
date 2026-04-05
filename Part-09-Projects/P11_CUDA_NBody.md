@@ -31,6 +31,8 @@
 
 ## Architecture Overview
 
+This flowchart shows the N-Body simulation pipeline. Bodies are initialized with positions, velocities, and masses, then registered with OpenGL for zero-copy rendering. Each frame, CUDA maps the VBO, computes gravitational forces with a shared-memory tiled kernel, integrates positions with leapfrog, then unmaps so OpenGL can render the particles directly.
+
 ```mermaid
 graph TD
     A[Initialize Bodies<br>positions, velocities, masses] --> B[Register OpenGL VBO<br>with CUDA]
@@ -45,6 +47,8 @@ graph TD
 ```
 
 ### Shared-Memory Tiling Strategy
+
+This diagram illustrates how global memory is divided into tiles of P bodies. Each thread block loads one tile at a time into shared memory, all threads compute forces from that tile, then `__syncthreads()` ensures the tile is fully consumed before loading the next one.
 
 ```mermaid
 graph LR
@@ -80,6 +84,8 @@ has accumulated the total force from all N bodies.
 
 ### Simulation Loop Detail
 
+This sequence diagram shows how the host orchestrates each frame: it maps the OpenGL VBO into CUDA address space, launches the force computation and integration kernels on the GPU, then unmaps the buffer so OpenGL can render the updated particle positions.
+
 ```mermaid
 sequenceDiagram
     participant Host
@@ -101,6 +107,8 @@ sequenceDiagram
 ---
 
 ## Step 1 — Data Structures and Constants
+
+This section defines the CUDA and OpenGL includes, simulation constants (gravity, softening, timestep), and global device pointers. Positions and masses are packed into `float4` for coalesced 128-bit memory loads — one transaction per thread instead of four separate reads.
 
 ```cuda
 // nbody.cu
@@ -144,6 +152,8 @@ per thread instead of four separate 32-bit reads.
 
 ## Step 2 — Initialization (Plummer Sphere Distribution)
 
+This function initializes body positions and velocities using the Plummer sphere model, a standard astrophysical distribution. Rejection sampling generates positions that follow ρ ∝ (1 + r²)^{-5/2}, producing a gravitationally self-consistent cluster that stays bound instead of immediately flying apart.
+
 ```cuda
 void init_bodies(float4* h_pos, float4* h_vel, int n) {
     // Plummer sphere: density ~ (1 + r²)^{-5/2}
@@ -180,6 +190,8 @@ core stays bound instead of immediately flying apart.
 
 ## Step 3 — Naive Force Kernel (Baseline)
 
+This baseline kernel computes all-pairs gravitational forces with O(N²) complexity. Every thread reads all N body positions from global memory to compute the net force on its assigned body. It works correctly but wastes bandwidth — N loads per thread means N² total global memory reads.
+
 ```cuda
 __global__ void compute_forces_naive(float4* pos, float3* force, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -215,6 +227,8 @@ bottleneck, not arithmetic.
 ---
 
 ## Step 4 — Tiled Force Kernel with Shared Memory
+
+This optimized kernel loads body positions into shared memory one tile at a time. Each tile of BLOCK_SIZE bodies is loaded once and reused by all threads in the block, reducing global memory reads by 256×. The `#pragma unroll 32` hint helps the compiler optimize the inner force-accumulation loop.
 
 ```cuda
 __global__ void compute_forces_tiled(float4* __restrict__ pos,
@@ -266,6 +280,8 @@ thread to N/BLOCK_SIZE per thread — a **256× reduction** in bandwidth demand.
 
 ## Step 5 — Leapfrog Integration (Kick-Drift-Kick)
 
+This kernel advances particle positions and velocities using the leapfrog method — a symplectic integrator that conserves a shadow Hamiltonian. It applies a half-step velocity kick, a full-step position drift, then another half-step kick. Unlike Euler integration, leapfrog keeps total energy bounded over long simulations.
+
 ```cuda
 __global__ void leapfrog_integrate(float4* pos, float4* vel,
                                    float3* force, int n, float dt) {
@@ -308,6 +324,8 @@ is essential for long-running simulations.
 ---
 
 ## Step 6 — CUDA-OpenGL Interop Setup
+
+This function creates the OpenGL window and vertex buffer, then registers the VBO with CUDA so both APIs share the same GPU memory. This zero-copy design means CUDA writes updated particle positions directly into the render buffer — no host↔device transfers needed each frame.
 
 ```cuda
 void init_gl(int argc, char** argv) {
@@ -370,6 +388,8 @@ directly into the VBO, then OpenGL renders from the same buffer.
 ---
 
 ## Step 7 — Render Loop and Simulation Step
+
+This is the main simulation loop. Each frame maps the OpenGL VBO into CUDA memory, runs the force and integration kernels, unmaps the buffer, and renders the particles with `glDrawArrays`. The `glutPostRedisplay()` call ensures continuous animation by requesting the next frame immediately.
 
 ```cuda
 void run_simulation_step() {
@@ -561,6 +581,8 @@ int main() {
 
 ### Build Commands
 
+Build commands for both modes: the interactive visualization links OpenGL/GLEW/GLUT libraries for real-time rendering, while the headless benchmark compiles without display dependencies for pure performance measurement.
+
 ```bash
 # Interactive visualization
 nvcc -O3 -arch=sm_80 nbody.cu -o nbody \
@@ -578,6 +600,8 @@ nvcc -O3 -arch=sm_80 benchmark.cu -o nbody_bench
 ## Testing Strategy
 
 ### 1. Conservation Tests (Energy & Momentum)
+
+This kernel computes kinetic and potential energy for every body so we can verify that the symplectic integrator conserves total energy. After 1000 simulation steps, the total energy should stay within 1% of its initial value — a key correctness check for any N-body simulator.
 
 ```cuda
 // Verify total energy is conserved within tolerance
@@ -615,6 +639,8 @@ __global__ void compute_energy(float4* pos, float4* vel,
 
 ### 3. Performance Regression
 
+This CI script runs the benchmark and checks that the tiled kernel with 16K bodies stays under 5ms. If a code change causes a performance regression, the test fails automatically, preventing slowdowns from being merged.
+
 ```bash
 # Automated performance check in CI
 ./nbody_bench | awk 'NR>2 && $1==16384 {
@@ -650,6 +676,8 @@ For N=65,536:
 ```
 
 ### Profiling with Nsight Compute
+
+Use Nsight Compute to profile kernel efficiency. The key metrics to check are SM throughput (should be >80% of peak), global memory bytes loaded (comparing naive vs tiled), and instruction count per thread.
 
 ```bash
 ncu --set full --target-processes all ./nbody_bench

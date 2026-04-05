@@ -104,6 +104,8 @@ Use parentheses to clarify intent. Prefer named casts over C-style casts. Use bi
 
 ### Example 1 — Arithmetic Operators and Integer Division
 
+This program demonstrates basic arithmetic operators and a key C++ gotcha: when both operands are integers, division truncates toward zero (17 / 5 gives 3, not 3.4). To get a decimal result, you must cast at least one operand to `double` using `static_cast`.
+
 ```cpp
 #include <iostream>
 
@@ -130,6 +132,8 @@ int main() {
 
 ### Example 2 — Comparison and the Spaceship Operator (C++20)
 
+This program shows traditional comparison operators alongside the C++20 three-way comparison (spaceship) operator `<=>`. The spaceship operator returns a value that tells you whether the left side is less than, equal to, or greater than the right side — all in a single operation.
+
 ```cpp
 #include <iostream>
 #include <compare>  // C++20
@@ -154,6 +158,8 @@ int main() {
 ```
 
 ### Example 3 — Bitwise Operations: Flags and Masks
+
+This program shows how to use individual bits as on/off flags — a technique used everywhere in systems programming. Each permission gets its own bit position, and you use OR to set flags, AND to check them, AND-NOT to clear them, and XOR to toggle them.
 
 ```cpp
 #include <iostream>
@@ -203,6 +209,8 @@ int main() {
 ```
 
 ### Example 4 — Bitwise Tricks
+
+This program collects several classic bitwise algorithms: checking if a number is a power of two, swapping values without a temporary variable, counting set bits using Kernighan's algorithm, and rounding up to the next power of two. These are common interview questions and appear frequently in performance-critical code.
 
 ```cpp
 #include <iostream>
@@ -257,6 +265,8 @@ int main() {
 ```
 
 ### Example 5 — C++ Named Casts
+
+This program demonstrates C++'s named cast operators, which replace the unsafe C-style `(int)x` syntax. Each cast has a specific purpose: `static_cast` for safe numeric conversions, `const_cast` for removing const (use sparingly), and `reinterpret_cast` for raw bit-level reinterpretation.
 
 ```cpp
 #include <iostream>
@@ -366,6 +376,8 @@ Write a program that evaluates simple expressions like `"3 + 4 * 2"` respecting 
 
 ### Solution 1: Simple Calculator
 
+This solution reads two numbers and an operator, then uses a `switch` statement to select the matching arithmetic operation. It handles division by zero as a special case and reports unknown operators via `std::cerr`.
+
 ```cpp
 #include <iostream>
 
@@ -396,6 +408,8 @@ int main() {
 
 ### Solution 2: Even/Odd Checker (Bitwise)
 
+This solution uses the bitwise AND operator to check the least significant bit: if `n & 1` is 0, the number is even. This is faster than using modulo (`n % 2`) and demonstrates a fundamental bitwise technique.
+
 ```cpp
 #include <iostream>
 
@@ -412,6 +426,8 @@ int main() {
 ```
 
 ### Solution 3: RGB Color Packer
+
+This solution packs three separate 8-bit color values (R, G, B) into a single 32-bit integer using bit shifts, and unpacks them back using shifts and masks. This is exactly how colors are stored in graphics memory and image file formats.
 
 ```cpp
 #include <iostream>
@@ -452,6 +468,8 @@ int main() {
 
 ### Solution 4: Safe Division
 
+This solution provides safe division functions that return `std::optional` — returning `std::nullopt` on division by zero or when the result would overflow. The integer version also handles the special case of `INT_MIN / -1`, which overflows.
+
 ```cpp
 #include <iostream>
 #include <optional>
@@ -480,6 +498,8 @@ int main() {
 ```
 
 ### Solution 5: Expression Evaluator
+
+This solution implements a recursive descent parser that correctly handles operator precedence. It splits parsing into `expr` (handles `+` and `-`), `term` (handles `*` and `/`), and `factor` (handles numbers and parentheses), naturally encoding the precedence hierarchy through the call structure.
 
 ```cpp
 #include <iostream>
@@ -638,6 +658,9 @@ This chapter covered C++ operators from basic arithmetic through bitwise manipul
 ## 11. Common Mistakes
 
 ### Mistake 1: Precedence Surprises with Bitwise Operators
+
+Bitwise operators like `&` have lower precedence than comparison operators like `==`, so `flags & MASK == 0` is parsed as `flags & (MASK == 0)` instead of `(flags & MASK) == 0`. Always use parentheses with bitwise expressions.
+
 ```cpp
 // BAD — & has lower precedence than ==
 if (flags & MASK == 0) { /* always false! */ }
@@ -648,6 +671,9 @@ if ((flags & MASK) == 0) { /* correct */ }
 ```
 
 ### Mistake 2: Using = Instead of ==
+
+Using a single `=` in an `if` condition performs an assignment instead of a comparison. The assigned value is then tested as a boolean, leading to logic that always succeeds or always fails. Compiling with `-Wall` catches this common typo.
+
 ```cpp
 int x = 5;
 if (x = 0) {  // ASSIGNS 0 to x, then checks if 0 is true → always false!
@@ -658,6 +684,9 @@ if (x == 0) { /* correct */ }
 ```
 
 ### Mistake 3: Signed/Unsigned Mixing in Bit Shifts
+
+Right-shifting a signed negative value is implementation-defined — different compilers may or may not propagate the sign bit. Always use unsigned types like `uint32_t` for bitwise operations to get well-defined, portable behavior.
+
 ```cpp
 int x = -1;
 unsigned int y = x >> 1;  // Implementation-defined! May propagate sign bit
@@ -667,6 +696,9 @@ uint32_t y = x >> 1;  // Well-defined: 0x7FFFFFFF
 ```
 
 ### Mistake 4: Assuming Evaluation Order
+
+The order in which function arguments are evaluated is unspecified in C++. If two arguments modify and read the same variable, the result is unpredictable. Separate such operations into distinct statements to ensure correct evaluation order.
+
 ```cpp
 int i = 0;
 int arr[3] = {10, 20, 30};

@@ -45,6 +45,8 @@ using Matrix = std::vector<std::vector<T>>;  // alias template
 | `sv` | `std::string_view` | `"hello"sv` |
 | `ms/us/ns` | `std::chrono::duration` | `100ms`, `2s` |
 
+C++ supports binary (`0b`) and hexadecimal (`0x`) integer literals. The digit separator (`'`) improves readability without affecting the value—useful for bitmasks and hardware addresses.
+
 ```cpp
 auto mask = 0b1111'0000;   // binary with digit separator
 auto addr = 0xFF'AA'00'11; // hex with digit separator
@@ -53,6 +55,8 @@ auto addr = 0xFF'AA'00'11; // hex with digit separator
 ---
 
 ## 2. Smart Pointers
+
+Modern C++ replaces raw `new`/`delete` with smart pointers that automatically manage memory. This snippet shows the three smart pointer types and common operations like ownership transfer and custom deleters.
 
 ```cpp
 auto p  = std::make_unique<T>(args);  // exclusive ownership
@@ -440,6 +444,8 @@ if (ec) std::cerr << ec.message();
 | `-fsanitize=undefined` | Undefined behavior |
 | `-fno-exceptions` | Disable exceptions |
 | `-fno-rtti` | Disable RTTI |
+
+These two command lines show the recommended compiler invocations for development (maximum warnings, debug symbols, sanitizers) and release (full optimization, LTO) builds.
 
 ```bash
 # Dev:     g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -g -O0 -fsanitize=address,undefined

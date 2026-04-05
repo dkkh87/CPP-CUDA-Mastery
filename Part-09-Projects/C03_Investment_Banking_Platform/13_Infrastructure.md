@@ -26,6 +26,8 @@ infrastructure code.
 
 ## Architecture
 
+This diagram shows the infrastructure layer organized as a pyramid. Application modules (OrderBook, PricingEngine, RiskEngine) sit on top, depending on three core infrastructure components — Arena Allocator, Lock-Free Logger, and Config System — which in turn depend on the OS and hardware layer beneath.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Modules                       │
@@ -95,6 +97,8 @@ with random lifetimes. We use arenas because order book updates follow batch pat
 ## Complete Code
 
 ### A. Arena Allocator
+
+This custom bump allocator pre-allocates a large memory block at startup and hands out memory by simply advancing a pointer — making allocation O(1) with no locks. It integrates with C++17's `std::pmr` (Polymorphic Memory Resource) so standard containers like `pmr::vector` can use it transparently. The `reset()` method frees all allocations instantly.
 
 ```cpp
 // infrastructure/arena_allocator.hpp
@@ -246,6 +250,8 @@ arena.reset();  // Instant "free" of everything — 0ns
 ---
 
 ### B. Lock-Free Logger
+
+This CRTP-based logger uses a lock-free ring buffer so trading threads can log messages without blocking. Each log entry is written atomically using `std::atomic` operations, and a background `std::jthread` flushes entries to disk. This design ensures logging never stalls the hot path.
 
 ```cpp
 // infrastructure/logger.hpp
@@ -413,6 +419,8 @@ private:
 
 ### C. Config System
 
+This configuration system uses `std::variant` for type-safe values and `std::expected` to report errors without exceptions. Configuration defaults are validated at compile time using `constexpr`, so misconfigurations are caught before the program even runs.
+
 ```cpp
 // infrastructure/config.hpp
 // Compile-time validated config with std::variant and std::expected (Ch 29, 30, 36)
@@ -565,6 +573,8 @@ private:
 
 ### D. High-Resolution Timer
 
+This timer uses `rdtsc` (read timestamp counter) and `std::chrono` for sub-nanosecond precision timing. It collects latency samples and computes percentile statistics (p50, p99, p99.9) which are critical for measuring whether the trading system meets its latency SLA.
+
 ```cpp
 // infrastructure/timer.hpp
 // High-resolution timing with RAII and latency percentiles (Ch 33)
@@ -669,6 +679,8 @@ private:
 ---
 
 ### E. Thread Pool
+
+This work-stealing thread pool uses `std::jthread` (C++20) with per-thread task queues. When a thread finishes its own work, it steals tasks from other threads' queues to keep all cores busy. This avoids the overhead of creating and destroying threads for each task.
 
 ```cpp
 // infrastructure/thread_pool.hpp
@@ -837,6 +849,8 @@ Consider what happens when the `OrderBook` (Module 2) processes a new order:
 ```
 
 ### Work-Stealing Visualization
+
+This shows how the work-stealing thread pool distributes tasks dynamically. When Thread 2 and Thread 3 become idle, they steal pending tasks from Thread 0's queue rather than sitting idle — ensuring all CPU cores stay productive.
 
 ```
 Thread 0 Queue:  [Task A] [Task B] [Task C]  ← busy

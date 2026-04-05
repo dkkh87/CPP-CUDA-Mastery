@@ -21,6 +21,8 @@
 
 ### Multi-GPU Topology
 
+This diagram shows how four GPUs are interconnected in a ring topology via PCIe or NVLink, with peer-to-peer (P2P) access enabled between adjacent GPUs. The host CPU distributes data to all GPUs via `cudaMemcpy`, and the GPUs exchange partial results directly without going through the host.
+
 ```mermaid
 graph TD
     subgraph Host
@@ -36,6 +38,8 @@ graph TD
 ```
 
 ### Ring AllReduce Algorithm
+
+This sequence diagram shows the two phases of ring AllReduce. In the scatter-reduce phase (N-1 steps), each GPU sends a chunk to its neighbor which reduces it with its own data. In the allgather phase (N-1 steps), the fully reduced chunks are propagated around the ring so every GPU ends up with the complete result.
 
 ```mermaid
 sequenceDiagram
@@ -71,6 +75,8 @@ graph LR
 ---
 
 ## 3. Implementation — `multi_gpu_reduction.cu`
+
+This is the complete multi-GPU reduction implementation demonstrating three approaches: single-GPU warp-shuffle reduction (baseline), manual P2P star-topology reduction, and NCCL ring AllReduce. It benchmarks all three, validates results against a Kahan-compensated CPU sum, and reports throughput and relative error.
 
 ```cuda
 // Build: nvcc -O3 -std=c++17 -arch=sm_80 -lnccl -o mgpu_reduce multi_gpu_reduction.cu
@@ -362,6 +368,8 @@ int main(int argc, char** argv) {
 
 ## 4. Build & Run
 
+Compile with NCCL support and the target GPU architecture. The program accepts the number of GPUs and the element count (in millions) as optional arguments.
+
 ```bash
 nvcc -O3 -std=c++17 -arch=sm_80 -lnccl -o mgpu_reduce multi_gpu_reduction.cu
 ./mgpu_reduce            # all GPUs, 64M elements
@@ -408,6 +416,8 @@ nvcc -O3 -std=c++17 -arch=sm_80 -lnccl -o mgpu_reduce multi_gpu_reduction.cu
 | Pipelining | None | Overlaps chunks with compute |
 
 ### Profiling
+
+Use Nsight Systems for a timeline view showing GPU-to-GPU transfers, Nsight Compute for per-kernel metrics, and `NCCL_DEBUG=INFO` to confirm that NCCL is using the optimal ring topology over NVLink.
 
 ```bash
 nsys profile -o report ./mgpu_reduce 4 128          # timeline

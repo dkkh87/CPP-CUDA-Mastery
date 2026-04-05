@@ -28,6 +28,8 @@ C++20 is the most transformative standard since C++11. Its four headline feature
 
 ## 1 — Concepts
 
+C++20 Concepts let you declare named constraints on template parameters using the `concept` keyword and `requires` expressions. Instead of relying on cryptic SFINAE tricks that produce pages of error messages, concepts give you clean, readable compile-time predicates — the compiler tells you exactly which constraint failed and why. This example defines a custom `Numeric` concept, uses it to constrain a function template, and shows the terse `auto` shorthand syntax.
+
 ```cpp
 #include <concepts>
 #include <iostream>
@@ -59,6 +61,8 @@ int main() {
 
 ### Subsumption — More-Constrained Overload Wins
 
+When multiple constrained overloads match a call, C++20 uses *subsumption* to pick the most specific one. Here `Pet` refines `Animal` by adding an extra requirement, so when a type satisfies both, the compiler automatically selects the `Pet` overload — no manual disambiguation needed. This replaces error-prone SFINAE priority tricks with a simple "more-constrained wins" rule.
+
 ```cpp
 #include <concepts>
 #include <iostream>
@@ -83,6 +87,8 @@ int main() { Dog d; greet(d); }  // Calls Pet overload
 ---
 
 ## 2 — Ranges
+
+C++20 Ranges replace verbose iterator-pair algorithms with composable, lazy view pipelines using the `|` (pipe) operator. Each view adaptor — `filter`, `transform`, `take` — processes elements on demand without creating intermediate containers, so a pipeline over a million elements only touches what is actually consumed. This is a major ergonomic and performance improvement over the old `std::begin`/`std::end` style.
 
 ```cpp
 #include <ranges>
@@ -109,6 +115,8 @@ int main() {
 
 ### Projections
 
+Range algorithms accept an optional *projection* — a callable that extracts the key to operate on — so you can sort or search by a struct member without writing a custom comparator. Here `std::ranges::sort` sorts employees by salary using `&Employee::salary` as the projection, which is cleaner and less error-prone than a lambda comparator.
+
 ```cpp
 #include <ranges>
 #include <algorithm>
@@ -130,6 +138,8 @@ Views are **lazy**: a pipeline over a million elements that `take(5)` only touch
 ---
 
 ## 3 — Coroutines
+
+C++20 coroutines are compiler-generated state machines that can suspend and resume execution using `co_await`, `co_yield`, and `co_return`. You provide a `promise_type` that defines how values are produced and how suspension works; the compiler handles the rest. This example builds a `Generator<T>` template from scratch and uses it to lazily yield an infinite Fibonacci sequence — each call to `next()` resumes the coroutine just long enough to produce one value, with no thread overhead.
 
 ```cpp
 #include <coroutine>
@@ -190,6 +200,8 @@ int main() {
 
 ## 4 — Modules
 
+C++20 Modules replace the `#include` preprocessor model with a compiled interface system. A module interface unit declares what symbols are `export`ed; everything else stays private. Modules are parsed and compiled once (producing a Binary Module Interface), so builds scale as O(N + M) instead of O(N × M), and macros never leak between translation units. This example shows a simple module that exports two functions while keeping a helper internal.
+
 ```cpp
 // math_utils.cppm — module interface unit
 export module math_utils;
@@ -198,6 +210,8 @@ export int square(int x) { return x * x; }
 export int cube(int x)   { return x * x * x; }
 int helper() { return 42; }  // not exported
 ```
+
+The consumer simply writes `import math_utils;` instead of `#include` — only exported symbols are visible, and no header guards or include-order issues arise.
 
 ```cpp
 // main.cpp — consumer
@@ -210,6 +224,8 @@ int main() {
 ```
 
 ### Module Partitions
+
+Module partitions let you split a large module into separate files while keeping a single module name. A public partition (declared with `export module M:part`) can be re-exported to consumers, while a private partition hides implementation details. This enables parallel compilation of partition files and clean internal organization without exposing internals.
 
 ```cpp
 // geometry.cppm — primary interface
@@ -251,6 +267,8 @@ target_link_libraries(app PRIVATE math_mod)
 
 ### std::format
 
+`std::format` brings Python/Rust-style format strings to C++, combining the type safety of `iostream` with the readability of `printf`. Format specifiers like `{:.4f}` and `{:#x}` control alignment, precision, and base — all checked at compile time in C++23. This eliminates the classic `printf` pitfall of mismatched format specifiers and argument types.
+
 ```cpp
 #include <format>
 #include <iostream>
@@ -263,6 +281,8 @@ int main() {
 ```
 
 ### std::span
+
+`std::span<T>` is a lightweight, non-owning view over contiguous memory — it works with C arrays, `std::array`, and `std::vector` through a single function signature. This replaces the old pattern of passing a pointer plus a size, giving you bounds-aware iteration and sub-range access via `subspan()` without copying data.
 
 ```cpp
 #include <span>
@@ -288,6 +308,8 @@ int main() {
 
 ### Three-Way Comparison (<=>)
 
+The spaceship operator `<=>` lets you default all six comparison operators (`<`, `>`, `<=`, `>=`, `==`, `!=`) in a single line. The compiler performs member-wise three-way comparison and returns a `strong_ordering`, `weak_ordering`, or `partial_ordering` category. This eliminates the tedious boilerplate of writing each relational operator by hand.
+
 ```cpp
 #include <compare>
 #include <iostream>
@@ -312,6 +334,8 @@ int main() {
 
 ### std::jthread
 
+`std::jthread` is a safer replacement for `std::thread` that automatically joins on destruction — no more crashes from a forgotten `.join()` call. It also provides built-in cooperative cancellation via `std::stop_token`: the worker checks `stop_requested()` in its loop, and the caller signals `request_stop()` to gracefully shut it down without killing the thread.
+
 ```cpp
 #include <thread>
 #include <iostream>
@@ -334,6 +358,8 @@ int main() {
 ```
 
 ### Chrono Calendar & Timezone
+
+C++20 extends `<chrono>` with type-safe calendar types (`year_month_day`) and timezone support (`zoned_time`). You can construct dates using the literal syntax `2025y / March / 15d`, perform date arithmetic with `days{1}`, and convert between timezones — all without the error-prone C-era `tm`/`mktime` functions.
 
 ```cpp
 #include <chrono>
@@ -409,6 +435,8 @@ Using the `Generator<T>` template, write a coroutine that yields Fibonacci numbe
 
 ### 🟢 Solution
 
+This solution defines a `Printable` concept using a `requires`-expression that checks whether a type can be streamed to `std::ostream` with `<<`. The `println` function is constrained by this concept, so passing a non-streamable type produces a clear compile-time error at the call site.
+
 ```cpp
 #include <concepts>
 #include <iostream>
@@ -424,6 +452,8 @@ int main() { println(42); println(3.14); println("hello"); }
 ```
 
 ### 🟡 Range Solution
+
+This solution builds a lazy range pipeline that filters words longer than 3 characters, transforms each to uppercase using `std::ranges::transform`, and takes the first 5 results. No intermediate `std::vector` is allocated — the pipe chain processes elements on demand during the final `for` loop.
 
 ```cpp
 #include <ranges>
@@ -448,6 +478,8 @@ int main() {
 
 ### 🟡 Spaceship Solution
 
+This solution implements a custom `operator<=>` for `Fraction` using cross-multiplication (`a/b` vs `c/d` becomes `a*d` vs `c*b`) to avoid floating-point division. The result is `strong_ordering`, and a separate `operator==` is provided because `<=>` alone doesn't auto-generate equality when the operator is user-defined rather than defaulted.
+
 ```cpp
 #include <compare>
 #include <iostream>
@@ -469,6 +501,8 @@ int main() {
 ```
 
 ### 🔴 Coroutine Solution
+
+This solution reuses the `Generator<T>` coroutine template from Section 3 to lazily produce Fibonacci numbers, then filters them through an `is_prime` function to collect the first 8 prime Fibonacci numbers. The coroutine suspends after each `co_yield`, so only the values actually needed are ever computed.
 
 ```cpp
 #include <coroutine>

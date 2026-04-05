@@ -290,6 +290,8 @@ allocations**, **lock-free queues**, **static polymorphism (CRTP)**, and
 
 ### 3.1 High-Level Component Diagram
 
+This diagram shows the full trading platform architecture. Data flows from the exchange through the hot path (market data → order book → strategy → risk → execution) with a strict sub-5µs latency budget, while cold-path services like persistence and monitoring run on separate threads.
+
 ```mermaid
 graph TB
     subgraph External
@@ -456,6 +458,8 @@ Key details:
   to call, safe `memcpy`).
 
 ### 3.4 Memory Architecture
+
+This diagram shows how the trading platform's process memory is organized. The arena allocator serves the hot path with zero-cost bump allocation, ring buffers handle lock-free inter-thread communication, and memory-mapped files provide durable persistence — all pre-allocated at startup to avoid runtime allocation.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -858,6 +862,8 @@ Each has a dedicated document with full implementation details.
 
 ### Cross-Module Dependencies
 
+This dependency graph shows how every application module (Market Data, Order Book, Pricing, Risk, etc.) depends on the shared infrastructure layer (Lock-Free Queues, Custom Allocators, Async Logger, Common Types). The infrastructure sits at the bottom, ensuring all modules use the same high-performance primitives.
+
 ```mermaid
 graph TD
     I4[I4: Common Types] --> I1[I1: Lock-Free Queues]
@@ -936,6 +942,8 @@ graph TD
 | **Startup time** | < 2 seconds | Pre-allocate all memory, load instruments, open connections |
 
 ### How We Measure
+
+This struct captures nanosecond-level latency measurements using the `rdtsc` CPU timestamp counter. It accumulates per-sample timing data into a histogram so you can compute percentile statistics (p50, p99, p99.9) — essential for proving the system meets its latency budget.
 
 ```cpp
 // Built-in latency measurement using rdtsc for nanosecond precision:
@@ -1118,6 +1126,8 @@ C03_Investment_Banking_Platform/
 
 ### Build Commands
 
+These commands configure, compile, and test the platform using CMake and Ninja. The debug build enables sanitizers (AddressSanitizer, ThreadSanitizer) for catching memory bugs and data races during development, while the release build turns on full optimizations (`-O3 -march=native`) for production-like performance.
+
 ```bash
 # Clone and enter the project
 cd C03_Investment_Banking_Platform/src
@@ -1147,6 +1157,8 @@ cd build-release && ./benchmarks/bench_order_book
 ```
 
 ### CMake Project Structure
+
+This is the root CMake build file that configures the entire project. It enforces C++20, enables strict compiler warnings (treated as errors in CI), and organizes the build into subdirectories for source code, tests, and benchmarks.
 
 ```cmake
 # Root CMakeLists.txt
@@ -1198,6 +1210,8 @@ add_subdirectory(../benchmarks benchmarks)
 ```
 
 ### Running the Platform
+
+These commands show three ways to run the trading platform: simulation mode (with mock market data for quick testing), full mode (with a mock exchange for end-to-end testing), and replay mode (to re-run a recorded trading session for debugging or analysis).
 
 ```bash
 # Run with mock market data (default mode)

@@ -93,6 +93,8 @@ graph LR
 
 ## 5. Program 1: Vector Addition
 
+This is the classic "Hello World" of CUDA — a complete vector addition program. It allocates arrays on both the CPU and GPU, copies input data to the GPU, launches a kernel where each thread adds one pair of elements (`c[i] = a[i] + b[i]`), copies results back, and verifies against a CPU reference. CUDA events measure the GPU kernel time accurately.
+
 ```cuda
 // File: vector_add.cu
 // Compile: nvcc -O3 -o vector_add vector_add.cu
@@ -240,6 +242,8 @@ Status:        PASS ✓
 
 ## 6. Program 2: Matrix Addition with 2D Grids
 
+This program extends vector addition to two dimensions using a 2D grid and 2D blocks. Each thread handles one matrix element, computing its row and column from `blockIdx` and `threadIdx` in both x and y dimensions. The 16×16 block size (256 threads) maps naturally to matrix tiles, and the bandwidth calculation shows how efficiently the kernel uses GPU memory.
+
 ```cuda
 // File: matrix_add.cu
 // Compile: nvcc -O3 -o matrix_add matrix_add.cu
@@ -382,6 +386,8 @@ cudaEventDestroy(stop);
 
 ### Timing Multiple Runs (Warm-Up + Average)
 
+The first kernel launch on a GPU is always slower due to JIT compilation and context initialization. This pattern runs one warm-up launch (discarded), then times 100 consecutive runs to get a stable average. Recording events outside the loop captures the total time for all iterations.
+
 ```cuda
 // Warm up — first kernel launch is slow due to JIT, context init
 myKernel<<<grid, block>>>(args);
@@ -403,6 +409,8 @@ printf("Average: %.3f ms/run\n", total_ms / RUNS);
 ---
 
 ## 8. Program 3: CPU vs GPU Scaling Benchmark
+
+This benchmark compares CPU vs GPU performance across different data sizes — from 1K to 16M elements. The kernel performs multiple math operations per element (`sin`, `cos`, `sqrt`, `exp`) to increase arithmetic intensity. The results reveal a key insight: GPU speedup grows with data size because more elements better saturate the GPU's thousands of cores.
 
 ```cuda
 // File: benchmark.cu
@@ -535,6 +543,8 @@ Elements         CPU (ms)      GPU (ms)      Speedup
 ---
 
 ## 9. .cu File Structure Best Practices
+
+This template shows the recommended layout for a `.cu` file. The order matters: standard headers first, then CUDA headers, error-checking macros, constants, `__device__` helper functions, `__global__` kernel functions, host wrapper functions, and finally `main()`. This structure keeps code organized and ensures declarations are available before use.
 
 ```cuda
 // ============================================
@@ -769,6 +779,9 @@ Achieving >80% of peak bandwidth on SAXPY indicates your memory subsystem is wor
 ## 14. Solutions
 
 ### Solution 1 (Modified Vector Add)
+
+This kernel uses `fmaf()` — the hardware fused multiply-add instruction — to compute `a[i] * b[i] + 1.0f` in a single operation. Fused multiply-add is both faster and more accurate than separate multiply and add because it performs only one rounding step instead of two.
+
 ```cuda
 __global__ void fmaKernel(const float* a, const float* b, float* c, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -780,6 +793,9 @@ __global__ void fmaKernel(const float* a, const float* b, float* c, int n) {
 ```
 
 ### Solution 4 (Naive Matrix Multiply)
+
+This naive matrix multiplication kernel assigns one thread per output element. Each thread computes a dot product by looping through row `i` of A and column `j` of B, accumulating the sum. While simple and correct, this approach is slow because every thread redundantly reads the same rows and columns from slow global memory.
+
 ```cuda
 __global__ void matMulNaive(const float* A, const float* B, float* C,
                             int M, int K, int N) {
@@ -799,6 +815,9 @@ __global__ void matMulNaive(const float* A, const float* B, float* C,
 ```
 
 ### Solution 7 (Pinned Memory)
+
+Pinned (page-locked) memory cannot be swapped to disk by the OS, enabling the GPU's DMA engine to transfer data directly without an intermediate copy. This typically doubles transfer bandwidth compared to regular `malloc` memory. Note that pinned memory must be freed with `cudaFreeHost`, not `free()`.
+
 ```cuda
 float *h_pinned;
 cudaMallocHost(&h_pinned, SIZE);  // Pinned (page-locked) host memory

@@ -369,6 +369,8 @@ Write raw CUDA C kernel strings, compile at runtime, execute from Python.
 pip install pycuda
 ```
 
+This example writes a full tiled matrix-multiply kernel in CUDA C as a Python string, compiles it at runtime via `SourceModule`, and launches it—demonstrating PyCUDA's compile-and-run workflow.
+
 ```python
 import pycuda.autoinit
 import pycuda.driver as drv
@@ -409,6 +411,8 @@ iterate in a REPL → copy the kernel into a `.cu` file when ready.
 ---
 
 ## 6. PyTorch CUDA Operations
+
+PyTorch tensors placed on `'cuda'` automatically dispatch to GPU-optimized libraries (cuBLAS for linear algebra, cuDNN for neural-net primitives) with no explicit kernel calls needed.
 
 ```python
 import torch
@@ -473,6 +477,8 @@ compiled = torch.compile(model)  # Fuses ops, optimizes memory access
 pip install jax[cuda12]
 ```
 
+JAX combines a NumPy-like API with XLA compilation. The decorators below show its four core transforms: `jit` (compile to GPU), `vmap` (auto-vectorize over batch dims), `grad` (automatic differentiation), and `pmap` (multi-GPU parallelism).
+
 ```python
 import jax, jax.numpy as jnp
 
@@ -522,6 +528,8 @@ GPU-accelerated pandas (cuDF), scikit-learn (cuML), and NetworkX (cuGraph).
 ```bash
 conda install -c rapidsai -c conda-forge cudf cuml cugraph cuda-version=12.0
 ```
+
+This snippet loads a CSV with cuDF (GPU-accelerated pandas), engineers a feature column, and trains a random forest entirely on the GPU using cuML—no data ever leaves device memory.
 
 ```python
 import cudf

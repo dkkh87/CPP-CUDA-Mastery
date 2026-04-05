@@ -128,6 +128,8 @@ int main() {
 
 ### 3.3 — std::print / std::println: Modern Output
 
+`std::print` and `std::println` bring `std::format`-style formatting directly to output, combining the type safety of `iostream` with the concise syntax of `printf`. They support all `std::format` specifiers — alignment, width, base, precision — and can write to any output stream including `stderr`. This eliminates both the verbose `<<` chaining of `iostream` and the type-mismatch bugs of `printf`.
+
 ```cpp
 // print_demo.cpp — Replacing iostream and printf
 #include <print>
@@ -185,6 +187,8 @@ int main() {
 
 ### 3.5 — std::flat_map / std::flat_set: Cache-Friendly Containers
 
+`std::flat_map` stores keys and values in sorted, contiguous vectors instead of a node-based tree like `std::map`. This gives dramatically better cache locality for small-to-medium collections, since elements sit side-by-side in memory rather than scattered across heap-allocated nodes. The API is identical to `std::map`, so switching is a one-line change.
+
 ```cpp
 // flat_map_demo.cpp — Sorted vectors behind a map interface
 #include <flat_map>
@@ -202,6 +206,8 @@ int main() {
 ```
 
 ### 3.6 — std::generator: Coroutine-Based Lazy Sequences
+
+`std::generator<T>` is C++23's standard coroutine return type for lazy sequences, replacing the boilerplate `promise_type` you had to write by hand in C++20. You simply `co_yield` values from a coroutine function and iterate over the result with a range-based `for` loop or pipe it into range adaptors. Elements are produced on demand, so even infinite sequences like Fibonacci use constant memory.
 
 ```cpp
 // generator_demo.cpp — Lazy infinite sequences
@@ -227,6 +233,8 @@ int main() {
 ```
 
 ### 3.7 — Ranges Improvements
+
+C++23 adds several powerful range adaptors that were missing from C++20: `enumerate` gives you index-value pairs, `zip` combines multiple ranges element-wise, `chunk` and `slide` split ranges into fixed-size groups or sliding windows, `stride` takes every Nth element, and `cartesian_product` generates all combinations. These eliminate common manual loop patterns and compose naturally with the pipe `|` operator.
 
 ```cpp
 // ranges_demo.cpp — New C++23 range adaptors
@@ -270,6 +278,8 @@ int main() {
 
 ### 3.8 — constexpr Enhancements
 
+C++23 extends `constexpr` to support `std::unique_ptr` and virtual function calls at compile time. This means you can allocate heap memory, use polymorphism, and run complex object-oriented logic entirely during compilation — the result is baked into the binary as a constant. Previously, compile-time computation was limited to simple arithmetic and non-virtual calls.
+
 ```cpp
 // constexpr_demo.cpp — constexpr unique_ptr and virtual functions
 #include <memory>
@@ -300,6 +310,8 @@ int main() {
 ```
 
 ### 3.9 — std::stacktrace: Programmatic Stack Traces
+
+`std::stacktrace` lets you capture and inspect the call stack at runtime from within your C++ code — no debugger needed. Each entry provides the function name, source file, and line number. This is invaluable for logging, crash reporting, and diagnostic assertions in production, replacing platform-specific hacks like `backtrace()` on Linux or `CaptureStackBackTrace()` on Windows.
 
 ```cpp
 // stacktrace_demo.cpp — Capture and print stack traces
@@ -398,6 +410,9 @@ Create a `QueryBuilder` class using deducing `this` for method chaining with `.s
 ## 6. Solutions
 
 ### S1: Print Formatting
+
+This solution uses `std::println` with format specifiers `{:>4}` and `{:>6}` to right-align numbers in fixed-width columns, producing a clean table of squares. The format string approach is more readable than chaining `std::setw` with `iostream`.
+
 ```cpp
 #include <print>
 int main() {
@@ -409,6 +424,9 @@ int main() {
 ```
 
 ### S2: Expected Division
+
+This solution returns `std::expected<double, std::string>` from `safe_divide`, using `std::unexpected` to signal division-by-zero with a descriptive error string. The caller checks the result with a simple `if` — no try/catch needed, and the error reason is preserved unlike `std::optional`.
+
 ```cpp
 #include <expected>
 #include <string>
@@ -428,6 +446,9 @@ int main() {
 ```
 
 ### S3: Generator Pipeline
+
+This solution uses `std::generator<int>` to lazily yield all FizzBuzz numbers (multiples of 3 or 5) below a limit via `co_yield`, then pipes the generator through `std::views::take(20)` to collect only the first 20 results. The generator produces values on demand, so even a large limit doesn't allocate a container.
+
 ```cpp
 #include <generator>
 #include <ranges>
@@ -446,6 +467,9 @@ int main() {
 ```
 
 ### S4: mdspan Transpose
+
+This solution wraps a flat `std::vector<int>` in two `std::mdspan` views — one for the source matrix and one for the transposed result — then swaps row and column indices during the copy. The C++23 multi-subscript syntax `dst[j, i] = src[i, j]` makes the transpose logic clear and concise without manual index arithmetic.
+
 ```cpp
 #include <mdspan>
 #include <vector>
@@ -470,6 +494,9 @@ int main() {
 ```
 
 ### S5: Deducing this Builder
+
+This solution uses the C++23 "deducing this" feature (`this auto& self`) so each builder method works with both lvalue and rvalue objects without writing separate const/non-const overloads. The explicit object parameter replaces the traditional CRTP pattern for method chaining, making the code simpler and avoiding template inheritance boilerplate.
+
 ```cpp
 #include <string>
 #include <print>

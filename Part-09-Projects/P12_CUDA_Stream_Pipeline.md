@@ -31,6 +31,8 @@
 
 ### Pipeline Stages
 
+This diagram shows the three-stage processing pipeline. Data flows from the host through an upload, two GPU compute stages (Scale+Bias and Smooth Filter), and a download back to the host. With multiple CUDA streams, these stages can overlap across different data chunks.
+
 ```mermaid
 flowchart LR
     A[Host Input] -->|cudaMemcpyAsync H→D| B[Stage 1: Scale + Bias]
@@ -79,6 +81,8 @@ gantt
 ## Step-by-Step Implementation
 
 ### Step 1 — Error Checking Macro
+
+This macro wraps every CUDA API call to check for errors immediately. If any call fails, it prints the exact file, line number, and error description, then terminates the program. This is essential because CUDA errors are asynchronous and can otherwise go undetected.
 
 ```cuda
 // stream_pipeline.cu
@@ -134,6 +138,8 @@ __global__ void smooth_filter_kernel(const float* __restrict__ input,
 ```
 
 ### Step 3 — Single-Stream Baseline
+
+This baseline implementation runs all operations — upload, two kernels, and download — sequentially on a single stream. CUDA events measure the total elapsed time. This establishes the performance floor that multi-stream pipelining will improve upon.
 
 ```cuda
 void run_single_stream(const float* h_input, float* h_output, int N,
@@ -290,6 +296,8 @@ void run_multi_stream(const float* h_input, float* h_output, int N,
 
 ### Step 5 — CPU Reference and Validation
 
+The CPU reference applies the same scale+bias and smoothing operations sequentially to produce a ground-truth result. The `validate()` function then compares every element of the GPU output against this reference, reporting the maximum error and its index — essential for catching subtle numerical bugs.
+
 ```cuda
 void cpu_reference(const float* input, float* output, int N,
                    float scale, float bias, int radius)
@@ -330,6 +338,8 @@ bool validate(const float* gpu, const float* cpu, int N, float tol = 1e-4f)
 ```
 
 ### Step 6 — Main Driver
+
+The main function allocates pinned host memory (required for async transfers), initializes input data, runs the CPU reference, then benchmarks both single-stream and multi-stream GPU paths. Pinned memory is essential because `cudaMemcpyAsync` only works asynchronously with page-locked host buffers.
 
 ```cuda
 int main(int argc, char** argv)
@@ -384,6 +394,8 @@ int main(int argc, char** argv)
 
 ## Build and Run
 
+Compile with the target GPU architecture flag and run with optional parameters for array size, stream count, and chunk count. Experimenting with different configurations shows how overlap efficiency changes with workload granularity.
+
 ```bash
 # Compile (adjust sm_75 to your GPU architecture)
 nvcc -O2 -arch=sm_75 -o stream_pipeline stream_pipeline.cu
@@ -410,6 +422,8 @@ nvcc -O2 -arch=sm_75 -o stream_pipeline stream_pipeline.cu
 | **Nsight Compute** | Run kernels through `ncu` to verify no memory access violations |
 
 ### Quick Smoke Test
+
+Run a minimal test to catch indexing bugs quickly, and a large test to stress the overlap pipeline. The small test verifies correctness with few elements; the large test pushes 128 MB through 3 streams to verify real-world performance.
 
 ```bash
 ./stream_pipeline 1024 2 4        # minimal — catches indexing bugs

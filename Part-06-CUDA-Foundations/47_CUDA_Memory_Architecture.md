@@ -92,6 +92,8 @@ Registers are the closest memory to the execution units — zero additional late
 | Managed by | Compiler (automatic) |
 | Max per thread | 255 registers |
 
+This kernel shows how local variables naturally live in GPU registers — the fastest memory available with zero additional latency. The variable `x` is loaded from global memory into a register, then all subsequent operations (`multiply`, `add`, `sqrt`) happen at register speed. The final result is written back to global memory.
+
 ```cuda
 __global__ void registerExample(float* data, int n) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -125,6 +127,8 @@ Local memory is **per-thread** but **physically resides in global memory (HBM)**
 - The compiler runs out of registers (register spill)
 - Arrays indexed with runtime-variable indices
 - Large structures that don't fit in registers
+
+This kernel demonstrates a common performance trap: declaring a large array inside a kernel. Since 256 floats exceeds the available registers, the compiler "spills" this array to local memory — which despite its name actually lives in slow global memory (~400 cycle latency). Use shared memory instead for large per-thread buffers.
 
 ```cuda
 __global__ void localMemoryTrap(float* output, int n) {
@@ -163,6 +167,8 @@ Shared memory is the most important optimization tool in CUDA. It's a programmer
 
 ### Static Shared Memory
 
+This kernel demonstrates the shared memory load-compute pattern. Each thread loads one element from slow global memory into fast shared memory, then `__syncthreads()` ensures all threads have finished loading before any thread reads another thread's data. This enables fast neighbor access — reading adjacent elements costs ~20 cycles from shared memory vs ~400 from global.
+
 ```cuda
 __global__ void sharedMemExample(float* input, float* output, int n) {
     // Statically allocated shared memory
@@ -187,6 +193,8 @@ __global__ void sharedMemExample(float* input, float* output, int n) {
 ```
 
 ### Dynamic Shared Memory
+
+Dynamic shared memory lets you set the buffer size at kernel launch time rather than compile time. The `extern __shared__` declaration creates a pointer, and the actual size (in bytes) is passed as the third argument of the `<<<>>>` launch syntax. This is useful when the buffer size depends on runtime parameters.
 
 ```cuda
 // Size specified at launch time
@@ -215,6 +223,8 @@ Bank 2:  addr 2, 34, 66, 98, ...
 Bank 31: addr 31, 63, 95, 127, ...
 ```
 
+These examples show how shared memory access patterns affect performance. Stride-1 access (each thread reads consecutive addresses) gives zero bank conflicts. Stride-32 means all 32 threads hit the same bank, serializing access to 32× slower. The padding trick (`[32][33]` instead of `[32][32]`) shifts each row by one bank, eliminating column-access conflicts.
+
 ```cuda
 // NO bank conflict: stride-1 access (each thread hits different bank)
 shared[threadIdx.x] = input[idx];  // thread 0→bank0, thread 1→bank1, ...
@@ -231,6 +241,8 @@ __shared__ float tile[32][33];  // 33 instead of 32 avoids column conflicts
 ## 7. Configuring Shared Memory vs L1 Cache
 
 On Hopper, the shared memory and L1 cache share the same physical SRAM. You can configure the split:
+
+On modern GPUs, shared memory and L1 cache share the same on-chip SRAM. These API calls let you control how much goes to each. Use more shared memory for tiled algorithms (like matrix multiply) and more L1 cache for irregular access patterns where you can't predict which data to load.
 
 ```cuda
 // Prefer more shared memory (for tiled algorithms)
@@ -249,6 +261,8 @@ cudaFuncSetAttribute(myKernel,
 ---
 
 ## 8. Global Memory and the CUDA API
+
+These are the fundamental CUDA memory management functions. `cudaMalloc` allocates GPU memory, `cudaMemcpy` transfers data between CPU and GPU (the direction is specified by the last argument), `cudaMemset` initializes GPU memory, and `cudaFree` releases it. The async variants enable overlapping transfers with computation using CUDA streams.
 
 ```cuda
 // Allocation
@@ -272,6 +286,8 @@ cudaMemcpyAsync(d_data, h_pinned, size, cudaMemcpyHostToDevice, stream);
 ```
 
 ### Error Handling Pattern
+
+This pattern shows robust error handling for GPU memory allocation. Unlike CPU `malloc` which returns NULL on failure, `cudaMalloc` returns an error code. Always check this code — running out of GPU memory is common with large models, and failing silently leads to crashes deep in kernel code.
 
 ```cuda
 float* d_ptr = nullptr;
@@ -461,6 +477,8 @@ __global__ void sampleTexture(cudaTextureObject_t tex, float* output,
 
 ## 12. Complete Memory Benchmark
 
+This comprehensive benchmark measures three key memory performance characteristics: coalesced global memory copy bandwidth, shared memory throughput, and the impact of strided (non-coalesced) access patterns. Running this on your GPU reveals how close your kernels can get to peak memory bandwidth and quantifies the penalty of non-coalesced access.
+
 ```cuda
 // File: memory_benchmark.cu
 // Compile: nvcc -O3 -o mem_bench memory_benchmark.cu
@@ -640,6 +658,9 @@ int main() {
 ## 14. Solutions
 
 ### Solution 1 (Memory Query)
+
+This snippet uses `cudaGetDeviceProperties` to query and display the most important memory specifications of your GPU — total global memory, shared memory per block, shared memory per SM, and L2 cache size.
+
 ```cuda
 cudaDeviceProp prop;
 cudaGetDeviceProperties(&prop, 0);
@@ -650,6 +671,9 @@ printf("L2: %d MB\n", prop.l2CacheSize / (1024 * 1024));
 ```
 
 ### Solution 5 (Shared Memory Reduction)
+
+This kernel performs a parallel sum reduction using shared memory. Each thread loads one element, then in a tree-reduction loop, half the threads add their neighbor's value at each step. After log₂(N) steps, thread 0 has the block's sum, which it adds to the global output using `atomicAdd` to safely handle multiple blocks.
+
 ```cuda
 __global__ void reduceShared(float* input, float* output, int n) {
     __shared__ float sdata[256];
@@ -674,6 +698,9 @@ __global__ void reduceShared(float* input, float* output, int n) {
 ```
 
 ### Solution 7 (Tiled Matrix Multiply — sketch)
+
+This tiled matrix multiplication loads small TILE×TILE sub-blocks of matrices A and B into shared memory, computes partial dot products, then moves to the next tile. Each global memory load is reused TILE times by different threads, reducing global memory traffic by a factor of TILE (16× in this case) compared to the naive approach.
+
 ```cuda
 #define TILE 16
 __global__ void matMulTiled(float* A, float* B, float* C, int N) {

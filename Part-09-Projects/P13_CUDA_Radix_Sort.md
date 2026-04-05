@@ -21,6 +21,8 @@
 
 ## Architecture
 
+This flowchart shows the GPU radix sort algorithm. It processes 4 bits at a time (8 passes for 32-bit keys) using a three-phase pipeline: per-block histogram counts digit occurrences, prefix scan converts counts to global offsets, and scatter writes each key to its sorted position. After all 8 passes, the output is fully sorted.
+
 ```mermaid
 flowchart TD
     A["Input Array (N uint32 keys)"] --> B["Pass Loop: bit = 0, 4, 8 … 28"]
@@ -61,6 +63,8 @@ flowchart TD
 ```
 
 ## Implementation — `radix_sort.cu`
+
+This is the complete GPU radix sort implementation. It includes the histogram, prefix scan, and scatter kernels, plus a main function that benchmarks the custom sort against CUB and Thrust. The sort processes 4-bit digits (16 buckets per pass), requiring 8 passes to sort 32-bit unsigned keys.
 
 ```cuda
 /* GPU Radix Sort — LSB, 4-bit digits, 32-bit unsigned keys.

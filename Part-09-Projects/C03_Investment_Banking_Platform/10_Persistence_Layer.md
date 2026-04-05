@@ -10,6 +10,8 @@ The Persistence Layer is responsible for durably storing every trade, position s
 
 ## Architecture Insight
 
+This diagram shows the two-phase persistence design. On the hot path, trades are appended to a Write-Ahead Log (WAL) and acknowledged immediately so the trading engine never blocks. In the background, a separate flush thread batches WAL entries into a binary trade store and periodically takes position snapshots for fast recovery.
+
 ```mermaid
 graph LR
     subgraph "Hot Path"
@@ -122,6 +124,8 @@ Investment banks use custom persistence for the hot path, then replicate to data
 ---
 
 ## Complete Implementation
+
+This is the full production-grade persistence layer. It implements a memory-mapped WAL for crash-safe writes, a binary trade store with fixed-size records for O(1) random access, and RAII file handles that guarantee no file descriptor leaks. The design prioritizes write throughput on the hot path while maintaining full durability guarantees.
 
 ```cpp
 // ============================================================================

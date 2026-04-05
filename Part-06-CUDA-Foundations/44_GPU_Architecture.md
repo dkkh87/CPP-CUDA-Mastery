@@ -259,6 +259,8 @@ graph TB
 - 3rd-gen in Hopper
 - Used in rendering, not typically for ML workloads
 
+This kernel demonstrates how to use NVIDIA Tensor Cores through the WMMA (Warp Matrix Multiply-Accumulate) API. Each warp cooperatively loads 16×16 matrix tiles into special "fragment" registers, then executes a hardware-accelerated matrix multiply-accumulate (`D = A × B + C`) in a single instruction — delivering dramatically higher throughput than individual CUDA core multiply-adds.
+
 ```cpp
 // Tensor Core usage via WMMA API (simplified)
 #include <mma.h>
@@ -323,6 +325,8 @@ __global__ void tensor_core_gemm() {
 ---
 
 ## 10. Code Example: Query GPU Properties
+
+This program queries and displays all hardware properties of your GPU using the CUDA runtime API. It calls `cudaGetDeviceProperties()` to retrieve details like SM count, memory sizes, clock rates, and compute capability, then estimates peak theoretical FLOPS. This is the first program you should run on any new GPU to understand its capabilities.
 
 ```cuda
 // File: gpu_query.cu

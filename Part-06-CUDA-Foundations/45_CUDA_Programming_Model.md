@@ -270,6 +270,8 @@ matrixKernel<<<gridDim, blockDim>>>(d_matrix, width, height);
 
 ## 8. Complete "Hello CUDA" Example
 
+This complete program demonstrates the full CUDA workflow from start to finish. It allocates GPU memory, launches a kernel where each thread computes the square of its index, copies results back to the CPU, and verifies correctness. The `CUDA_CHECK` macro wraps every API call to catch errors immediately — a critical best practice since CUDA errors are otherwise silent.
+
 ```cuda
 // File: hello_cuda.cu
 // Compile: nvcc -o hello_cuda hello_cuda.cu
@@ -396,6 +398,8 @@ gridStrideAdd<<<numBlocks, threadsPerBlock>>>(d_a, d_b, d_c, n);
 
 Since Compute Capability 3.5, kernels can launch other kernels from the device:
 
+Dynamic Parallelism allows a GPU kernel to launch other kernels directly from the device, without returning control to the CPU. Here, `parentKernel` launches `childKernel` from the GPU itself. This is useful for algorithms that discover new work at runtime, like recursive tree traversals or adaptive mesh refinement.
+
 ```cuda
 __global__ void parentKernel(float* data, int n) {
     if (threadIdx.x == 0) {
@@ -444,6 +448,8 @@ cudaFree(data);
 ---
 
 ## 12. Compilation with nvcc
+
+These commands show the most common ways to compile CUDA programs with `nvcc`. The `-arch=sm_XX` flag targets a specific GPU architecture, `-g -G` enables debugging, and `--ptxas-options=-v` reveals how many registers and how much shared memory each kernel uses — essential information for occupancy tuning.
 
 ```bash
 # Basic compilation
@@ -497,6 +503,9 @@ nvcc file1.o file2.o -o program
 ## 14. Solutions
 
 ### Solution 1 (Thread Index)
+
+This solution kernel demonstrates CUDA thread indexing. Each thread prints its block index, local thread index, and computed global index. Launching with 2 blocks of 4 threads creates 8 total threads, and the output shows how `blockIdx.x * blockDim.x + threadIdx.x` maps each thread to a unique global ID.
+
 ```cuda
 __global__ void printIndices() {
     int global = blockIdx.x * blockDim.x + threadIdx.x;
@@ -517,6 +526,9 @@ int main() {
 ```
 
 ### Solution 3 (Ceiling Division)
+
+This ceiling division function is a fundamental CUDA utility. When dividing N elements among blocks of size d, integer division truncates — so `1000 / 256 = 3`, which only covers 768 elements. Adding `d - 1` before dividing rounds up, giving 4 blocks to cover all 1000 elements. The kernel's `if (idx < n)` guard prevents the extra threads from accessing out-of-bounds memory.
+
 ```cpp
 int ceilDiv(int n, int d) {
     return (n + d - 1) / d;
@@ -528,6 +540,9 @@ int ceilDiv(int n, int d) {
 ```
 
 ### Solution 6 (Kernel Timing)
+
+This snippet shows the correct way to measure GPU kernel execution time using CUDA events. Events are recorded directly on the GPU's timeline (unlike CPU clocks, which can't see asynchronous GPU work). The `cudaEventSynchronize` call blocks until the stop event completes, and `cudaEventElapsedTime` returns the precise elapsed time in milliseconds.
+
 ```cuda
 cudaEvent_t start, stop;
 cudaEventCreate(&start);

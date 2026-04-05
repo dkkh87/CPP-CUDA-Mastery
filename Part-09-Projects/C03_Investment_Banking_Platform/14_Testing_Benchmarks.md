@@ -20,6 +20,8 @@ Every test uses deterministic inputs — no randomness, no network calls, no fla
 
 ## Architecture
 
+This diagram shows the three-layer test architecture. Unit tests validate each module in isolation, integration tests verify cross-module interactions (like an order flowing from book to risk to execution), and benchmarks measure latency and throughput to ensure the system meets its performance targets.
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                   Test Runner (main)                      │
@@ -76,6 +78,8 @@ Our framework is ~50 lines — just enough to run meaningful tests.
 ## Complete Code
 
 ### A. Unit Test Framework
+
+This is a minimal custom test framework built from scratch using C++20 features. It uses templates and concepts for type-safe assertions, `std::source_location` for automatic file/line reporting on failures, and function registration for test discovery — no macros needed.
 
 ```cpp
 // test/test_framework.hpp
@@ -228,6 +232,8 @@ inline int run_all_tests() {
 ---
 
 ### B. Module Tests
+
+These unit tests cover all 12 platform modules with deterministic inputs. Each test verifies correctness of a specific component — order book matching, pricing calculations, risk limits, queue operations — using the custom test framework defined above.
 
 ```cpp
 // test/test_modules.cpp
@@ -481,6 +487,8 @@ TEST(config_parse_bool) {
 
 ### C. Performance Benchmark Suite
 
+This benchmark suite measures latency and throughput for every critical trading path. It uses `rdtsc`-based timing for nanosecond precision and reports percentile statistics (p50, p99, p99.9) to identify tail-latency issues that averages would hide.
+
 ```cpp
 // benchmark/benchmark_suite.cpp
 // Complete latency and throughput benchmarks for the trading platform
@@ -716,6 +724,8 @@ int main() {
 
 ### Linux `perf` — Hardware Event Profiling
 
+Use these `perf` commands to profile CPU-level performance. The recording captures call stacks at 1,000 Hz, and the report shows which functions consume the most CPU cycles, suffer cache misses, or have branch mispredictions.
+
 ```bash
 # Record CPU cycles for 10 seconds
 perf record -g -F 1000 ./trading_platform -- --benchmark
@@ -732,6 +742,8 @@ perf report --stdio
 
 ### Valgrind — Memory and Cache Analysis
 
+These Valgrind commands detect memory leaks, simulate cache behavior, and profile call graphs. While slower than `perf` (Valgrind instruments every instruction), they catch bugs that hardware profilers cannot — like use-after-free or uninitialized reads.
+
 ```bash
 # Memory leak detection
 valgrind --leak-check=full ./trading_platform --test
@@ -746,6 +758,8 @@ callgrind_annotate callgrind.out.<pid>
 ```
 
 ### Address / Thread Sanitizers
+
+These compiler flags enable runtime instrumentation that catches memory errors (AddressSanitizer) and data races (ThreadSanitizer) during testing. They add ~2× slowdown but find bugs that are nearly impossible to detect through code review alone.
 
 ```bash
 # Compile with sanitizers (Clang or GCC)
@@ -775,6 +789,8 @@ g++ -fsanitize=thread  -fno-omit-frame-pointer -g -O1 *.cpp -o platform_tsan
 | Growing memory | Valgrind | Arena not reset, leaked allocations |
 
 ### Flamegraph Interpretation
+
+This ASCII flamegraph illustrates how to read CPU profiling results. The width of each block shows what percentage of CPU time that function consumed, and the vertical stacking shows the call hierarchy. In this example, `match()` at 35% is the clear optimization target.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐

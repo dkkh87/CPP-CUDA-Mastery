@@ -63,6 +63,8 @@ Write `.cpp` files → compile with `g++` or `clang++` → link → run the bina
 
 ### Example 1 — Classic Hello World
 
+This is the simplest possible C++ program. It includes the `<iostream>` header to access the output stream, prints a message using `std::cout`, and returns 0 to indicate success to the operating system.
+
 ```cpp
 // hello.cpp — The simplest C++ program
 #include <iostream>  // Brings in std::cout, std::endl
@@ -73,6 +75,8 @@ int main() {
 }
 ```
 
+Use these commands to compile with C++17 and all major warnings enabled, then run the resulting binary.
+
 **Compile & Run:**
 ```bash
 g++ -std=c++17 -Wall -Wextra -o hello hello.cpp
@@ -80,6 +84,8 @@ g++ -std=c++17 -Wall -Wextra -o hello hello.cpp
 ```
 
 ### Example 2 — Interactive Input/Output
+
+This program demonstrates how to read input from the user. It uses `std::getline` to read a full line (which handles spaces in names) and the extraction operator `>>` to read a number, showing two different approaches to input.
 
 ```cpp
 // greet.cpp — Reading user input
@@ -101,6 +107,8 @@ int main() {
 ```
 
 ### Example 3 — Return Values Matter
+
+This program shows how command-line arguments work through `argc` (argument count) and `argv` (argument values). It also demonstrates using `EXIT_SUCCESS` and `EXIT_FAILURE` instead of magic numbers, and writing error messages to `std::cerr` instead of `std::cout`.
 
 ```cpp
 // exit_code.cpp — Demonstrating return values
@@ -128,6 +136,8 @@ echo $?              # Shows the exit code
 
 ### Example 4 — Multi-File Project
 
+This example shows how real C++ projects split code across multiple files. The header file declares function prototypes so other files know what functions exist, while `#pragma once` prevents the header from being included more than once.
+
 ```cpp
 // math_utils.hpp — Header with declarations
 #pragma once  // Modern include guard
@@ -136,6 +146,8 @@ int add(int a, int b);
 int multiply(int a, int b);
 ```
 
+The source file provides the actual implementations of the functions declared in the header. This separation lets you change the implementation without recompiling every file that uses these functions.
+
 ```cpp
 // math_utils.cpp — Source with definitions
 #include "math_utils.hpp"
@@ -143,6 +155,8 @@ int multiply(int a, int b);
 int add(int a, int b) { return a + b; }
 int multiply(int a, int b) { return a * b; }
 ```
+
+The main file includes the header to learn about the available functions, then calls them. The linker will connect these calls to the actual implementations in `math_utils.cpp`.
 
 ```cpp
 // main.cpp — Uses the math utilities
@@ -163,6 +177,8 @@ g++ -std=c++17 -Wall -o calc main.cpp math_utils.cpp
 ```
 
 ### Example 5 — Minimal CMakeLists.txt
+
+CMake is the standard build system for C++ projects. This minimal configuration file tells CMake the project name, which C++ standard to use, and which source files to compile into the final executable.
 
 ```cmake
 # CMakeLists.txt
@@ -256,6 +272,8 @@ Write a program and use `g++ -E` to see the preprocessed output. Add a custom `#
 
 ### Solution 1: Temperature Converter
 
+This solution reads a Celsius value, applies the conversion formula, and prints the result. Using `double` instead of `int` ensures we get decimal precision in the output.
+
 ```cpp
 #include <iostream>
 
@@ -272,6 +290,8 @@ int main() {
 
 ### Solution 2: Command-Line Echo
 
+This solution loops through all command-line arguments using `argc` as the count and `argv[i]` to access each argument string, printing each one with its index.
+
 ```cpp
 #include <iostream>
 
@@ -285,6 +305,8 @@ int main(int argc, char* argv[]) {
 
 ### Solution 3: Multi-File Calculator
 
+The header declares the four calculator functions. Division returns `std::optional<double>` instead of a plain `double` so it can signal a division-by-zero error without crashing or using special sentinel values.
+
 ```cpp
 // calc.hpp
 #pragma once
@@ -295,6 +317,8 @@ double subtract(double a, double b);
 double multiply(double a, double b);
 std::optional<double> divide(double a, double b);
 ```
+
+The implementation file defines each function. The `divide` function checks for zero before dividing and returns `std::nullopt` if the divisor is zero, letting the caller decide how to handle the error.
 
 ```cpp
 // calc.cpp
@@ -309,6 +333,8 @@ std::optional<double> divide(double a, double b) {
     return a / b;
 }
 ```
+
+The main file calls each calculator function and uses `if (auto result = ...)` to safely check whether `divide` succeeded before accessing the value, demonstrating C++17's `std::optional` pattern.
 
 ```cpp
 // main.cpp
@@ -334,6 +360,8 @@ int main() {
 
 ### Solution 4: CMakeLists.txt
 
+This CMake configuration builds the calculator project. It enables strict compiler warnings (`-Wall -Wextra -Wpedantic`) using `target_compile_options` and turns on `compile_commands.json` export for editor integration.
+
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 project(Calculator LANGUAGES CXX)
@@ -347,6 +375,8 @@ target_compile_options(calculator PRIVATE -Wall -Wextra -Wpedantic)
 ```
 
 ### Solution 5: Preprocessor Explorer
+
+This program reveals a classic C preprocessor pitfall. The `SQUARE` macro does simple text substitution, so `SQUARE(1+2)` expands to `1+2 * 1+2` instead of `(1+2) * (1+2)`, producing the wrong result due to operator precedence.
 
 ```cpp
 // macro_demo.cpp
@@ -453,6 +483,9 @@ int helper();
 Without guards, including this header twice causes redefinition errors.
 
 ### Mistake 2: Using `endl` Everywhere
+
+Using `std::endl` forces a buffer flush after every write, which is extremely slow in loops. The `'\n'` character inserts a newline without flushing, making it much faster for repeated output.
+
 ```cpp
 // BAD — unnecessary flush kills performance in loops
 for (int i = 0; i < 1000000; ++i)
@@ -464,6 +497,9 @@ for (int i = 0; i < 1000000; ++i)
 ```
 
 ### Mistake 3: Defining Functions in Headers (without inline)
+
+If you define a function body directly in a header file without marking it `inline`, every `.cpp` file that includes the header gets its own copy, causing a linker error for multiple definitions. Use `inline` or move the definition to a `.cpp` file.
+
 ```cpp
 // BAD — defined in header, included in multiple .cpp files → linker error
 // utils.hpp
@@ -474,6 +510,9 @@ inline int add(int a, int b) { return a + b; }
 ```
 
 ### Mistake 4: Mixing `cin >>` and `getline`
+
+When `cin >>` reads a value, it leaves the trailing newline character in the input buffer. A subsequent `std::getline` call reads that leftover newline as an empty string. The fix is to call `cin.ignore()` to discard the leftover newline first.
+
 ```cpp
 int age;
 std::cin >> age;          // Reads number, leaves '\n' in buffer

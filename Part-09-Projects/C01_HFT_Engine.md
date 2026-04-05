@@ -1805,6 +1805,8 @@ clang++ -std=c++20 -O1 -g -fsanitize=fuzzer,address -mavx2 \
 ./fuzz_fix -max_len=1024 -runs=1000000
 ```
 
+This is a libFuzzer harness that feeds random byte sequences into the FIX parser to uncover crashes, buffer overflows, and edge cases. The function signature follows the libFuzzer convention — it receives arbitrary data and returns 0 to signal no crash.
+
 ```cpp
 // fuzz_fix.cpp
 #include "fix_parser.hpp"
