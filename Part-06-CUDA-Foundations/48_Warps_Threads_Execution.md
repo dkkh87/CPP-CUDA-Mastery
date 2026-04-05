@@ -234,6 +234,8 @@ Predication is efficient for branches where each path is 1-7 instructions. For l
 
 Modern CUDA (CC 7.0+) provides warp-level intrinsics for direct communication between lanes:
 
+This kernel demonstrates the four categories of warp-level intrinsics. Shuffle operations (`__shfl_sync` variants) let threads exchange register values directly — without shared memory or synchronization barriers. Vote operations (`__all_sync`, `__any_sync`, `__ballot_sync`) perform collective boolean tests across the warp. The warp reduction at the bottom sums all 32 values in just 5 steps using `__shfl_down_sync`.
+
 ```cuda
 #include <cooperative_groups.h>
 namespace cg = cooperative_groups;
@@ -338,6 +340,8 @@ graph TB
 ```
 
 ### Occupancy Calculator (Programmatic)
+
+This program uses the CUDA runtime API to calculate kernel occupancy — the ratio of active warps to the maximum possible on each SM. `cudaOccupancyMaxPotentialBlockSize` suggests the optimal block size for a given kernel, while `cudaOccupancyMaxActiveBlocksPerMultiprocessor` tells you how many blocks can run simultaneously on one SM with a specific block size.
 
 ```cuda
 #include <stdio.h>
@@ -493,6 +497,8 @@ myOptimizedKernel(float* data, int n) {
 ---
 
 ## 11. Warp Divergence Benchmark
+
+This benchmark quantifies the performance cost of warp divergence by comparing four kernels: one with no branching, one where odd and even threads take different paths (50% divergence), one with 4-way divergence within each warp, and one where branches align to warp boundaries (different warps take different paths, but threads within each warp agree). The warp-aligned version should perform nearly as fast as the no-divergence version.
 
 ```cuda
 // File: warp_divergence_bench.cu
@@ -704,6 +710,9 @@ __global__ void producerConsumer(int* flag, float* data) {
 ## 15. Solutions
 
 ### Solution 1 (Warp Identification)
+
+This kernel prints each thread's warp ID and lane ID. The warp ID is computed by dividing the linearized thread index by 32, and the lane ID is the remainder. This helps visualize how CUDA organizes threads into warps.
+
 ```cuda
 __global__ void warpInfo() {
     int linearIdx = threadIdx.x + threadIdx.y * blockDim.x;
@@ -716,6 +725,9 @@ __global__ void warpInfo() {
 ```
 
 ### Solution 5 (Warp Shuffle Reduction)
+
+This kernel performs a complete array reduction (sum) using only warp shuffle instructions — no shared memory needed. Each warp reduces its 32 values in 5 steps using `__shfl_down_sync`, then lane 0 of each warp atomically adds its partial sum to the output. For large arrays, a two-phase approach (block reduction + final reduction) is more efficient.
+
 ```cuda
 __global__ void warpReduceSum(float* input, float* output, int n) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -737,6 +749,9 @@ __global__ void warpReduceSum(float* input, float* output, int n) {
 ```
 
 ### Solution 6 (Resource Calculator)
+
+This function manually calculates GPU occupancy by checking all four resource limits: maximum threads, maximum blocks, available registers, and available shared memory per SM. The most restrictive resource determines how many blocks can run simultaneously, which determines the occupancy percentage.
+
 ```cuda
 void calculateOccupancy(int threadsPerBlock, int regsPerThread,
                         int sharedMemPerBlock) {

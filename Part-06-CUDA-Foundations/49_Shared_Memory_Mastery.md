@@ -32,6 +32,8 @@ Shared memory is **20-40× lower latency** than global memory. Any kernel that r
 
 ### Static Allocation
 
+This kernel declares shared memory arrays with fixed sizes known at compile time. The `__shared__` keyword places the array in fast on-chip SRAM (~20 cycle latency) rather than slow global memory (~400 cycles). All threads in the block can read and write to these shared arrays.
+
 ```cuda
 __global__ void kernel() {
     __shared__ float tile[32][32];   // Fixed at compile time — 4 KB
@@ -213,6 +215,8 @@ if (blockDim.x > 64) {     // Block-uniform condition — all or none
 
 ### Naive Matrix Multiply (No Shared Memory)
 
+This naive matrix multiplication assigns one thread per output element of C. Each thread loops through an entire row of A and column of B, reading every element from slow global memory. For a 1024×1024 matrix, each output element requires 2048 global memory reads — making this approach extremely memory-bandwidth limited.
+
 ```cuda
 // C[M×N] = A[M×K] × B[K×N]
 __global__ void matmulNaive(const float* A, const float* B, float* C,
@@ -233,6 +237,8 @@ __global__ void matmulNaive(const float* A, const float* B, float* C,
 **Problem**: Each element of C reads K values from A and K from B. In a 16×16 block, the **same B column tile** is read by all 16 threads in a row — 16× redundant global reads.
 
 ### Tiled Matrix Multiply
+
+This tiled matrix multiplication dramatically reduces global memory traffic by loading small TILE×TILE sub-blocks into shared memory. All threads in a block cooperatively load one tile from A and one from B, synchronize, then compute partial dot products entirely from fast shared memory. This process repeats across all tiles. Each global memory load is reused TILE times, reducing traffic by 16×.
 
 ```cuda
 #define TILE 16
@@ -307,6 +313,8 @@ graph LR
 
 Cooperative Groups (CUDA 9+) provide a **type-safe, flexible** synchronization API.
 
+This kernel uses the modern Cooperative Groups API as a type-safe alternative to `__syncthreads()` and raw warp intrinsics. `cg::this_thread_block()` represents the block, and `cg::tiled_partition<32>()` splits it into warp-sized tiles. The `warp.shfl_down()` method performs the same shuffle operation as `__shfl_down_sync` but with compile-time safety guarantees.
+
 ```cuda
 #include <cooperative_groups.h>
 namespace cg = cooperative_groups;
@@ -344,6 +352,8 @@ __global__ void coopGroupKernel(float* data, int N) {
 
 ### Pattern: Sliding Window
 
+This 1D stencil kernel demonstrates the 'halo' pattern for shared memory. Each block loads its elements plus R extra elements on each side (the 'halo' or 'ghost' region) from neighboring blocks' data. After synchronizing, each thread can compute a local average of its 2R+1 neighbors entirely from shared memory, avoiding redundant global memory reads.
+
 ```cuda
 __global__ void stencil1D(const float* in, float* out, int N, int R) {
     extern __shared__ float smem[];
@@ -374,6 +384,8 @@ __global__ void stencil1D(const float* in, float* out, int N, int R) {
 ```
 
 ### Pattern: Histogram in Shared Memory
+
+This histogram kernel uses shared memory to minimize expensive global atomic operations. Each block first builds a local histogram in shared memory using fast shared-memory atomics, then merges the block-level results into the global histogram with one atomic per bin. This reduces global atomics from N (one per element) to `num_blocks × num_bins`.
 
 ```cuda
 __global__ void histogram(const int* data, int* hist, int N, int bins) {
@@ -442,6 +454,8 @@ graph TD
 
 ### Solution 1 (🟢 Reverse Array)
 
+This kernel reverses an array using shared memory as a staging area. Each thread loads element `i` into shared memory position `i`, all threads synchronize, then each thread reads from the mirrored position `255 - i`. The synchronization barrier ensures all elements are loaded before any thread reads from a different position.
+
 ```cuda
 #include <cstdio>
 
@@ -475,6 +489,8 @@ int main() {
 ```
 
 ### Solution 3 (🟡 Tiled MatMul with Boundary Handling)
+
+This complete tiled matrix multiplication handles matrices whose dimensions are not multiples of the tile size. The boundary check `(row < M && aCol < K)` fills out-of-bounds positions with zero, ensuring correct results for any matrix dimensions. The CPU reference multiplication verifies the GPU result.
 
 ```cuda
 #include <cstdio>
