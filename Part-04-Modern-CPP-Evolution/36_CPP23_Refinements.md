@@ -1,5 +1,7 @@
 # Chapter 36 — C++23: Refinements and Additions
 
+The following tags list the C++23 features explored in this chapter, from `std::expected` for error handling to `std::mdspan` for multidimensional array views.
+
 ```yaml
 tags:
   - cpp23

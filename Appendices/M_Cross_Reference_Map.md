@@ -354,12 +354,16 @@ graph LR
 
 ### Path A — "I know C, teach me modern C++"
 
+This path skims the basics you already know from C, then focuses on OOP, modern idioms, concurrency, and the C++17/20 standards. The project sequence builds a JSON parser, skip list, thread pool, and culminates in a high-frequency trading engine capstone.
+
 ```
 Ch01 → Ch02–12 (skim) → Ch13–16 → Ch19–21 → Ch25 → Ch33 → Ch35 → Ch38
 Projects: P01 → P02 → P03 → C01
 ```
 
 ### Path B — "I know C++, teach me CUDA"
+
+This path jumps straight into GPU programming, covering CUDA foundations through advanced optimization, then into AI/ML kernels. It follows all ten labs in order and finishes with a ray tracer capstone project.
 
 ```
 Ch39 → Ch44–49 → Ch52 → Ch54 → Ch55–57 → Ch62–64 → Ch69
@@ -370,6 +374,8 @@ Projects: P06 → P09 → P15 → C02
 
 ### Path C — "I want to write ML kernels ASAP"
 
+This is the fastest route to writing custom machine-learning CUDA kernels. It covers only the essential GPU fundamentals before diving into Tensor Cores, AI training, and inference optimization — skipping non-ML CUDA topics entirely.
+
 ```
 Ch44–46 (essentials) → Ch47 → Ch49 → Ch52 → Ch62 → Ch64–66 → Ch69
 Labs: Lab01 → Lab04 → Lab10
@@ -378,6 +384,8 @@ Projects: P09 → P15
 ```
 
 ### Path D — "Full journey, front to back"
+
+This path reads every part in sequential order, interleaving labs and projects at each stage for hands-on practice. It is the most thorough approach and ends with both capstone projects.
 
 ```
 Part 1 → Part 2 → Part 3 → Part 4 → Part 5 → Part 6 → Part 7 → Part 8

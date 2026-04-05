@@ -1,5 +1,7 @@
 # Chapter 35 — C++20: The Big Four
 
+The following tags categorize the major C++20 features covered in this chapter, from concepts and ranges to coroutines and modules.
+
 ```yaml
 tags: [cpp20, concepts, ranges, coroutines, modules, std-format, std-span, spaceship-operator, jthread, chrono]
 ```
@@ -243,6 +245,8 @@ double pi_approx() { return 3.14159265; }
 ```
 
 ### CMake Support (≥ 3.28)
+
+This CMake configuration shows how to enable C++20 module support in your build system. You need CMake 3.28 or later, and the `CXX_SCAN_FOR_MODULES` property tells CMake to automatically scan source files for module declarations and build them in the correct order.
 
 ```cmake
 cmake_minimum_required(VERSION 3.28)

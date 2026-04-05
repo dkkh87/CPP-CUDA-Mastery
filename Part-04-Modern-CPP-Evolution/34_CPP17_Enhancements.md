@@ -1,5 +1,7 @@
 # Chapter 34 — C++17: Practical Enhancements
 
+The following tags categorize the key topics covered in this chapter, making it easy to search and cross-reference with other material.
+
 ```yaml
 tags: [cpp17, structured-bindings, optional, variant, filesystem, parallel-stl,
        fold-expressions, ctad, string-view, if-constexpr, modern-cpp]

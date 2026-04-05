@@ -282,6 +282,8 @@ int main() {
 
 ### Compare-And-Swap (CAS) Explained
 
+This pseudocode shows the atomic compare-and-swap operation that is the foundation of all lock-free data structures. CAS reads the value at an address, checks whether it still matches what you expected, and only writes the new value if it does — all as a single indivisible step. If another thread changed the value first, CAS fails and lets you retry.
+
 ```
 CAS(address, expected, desired):
     atomically {
@@ -430,6 +432,8 @@ int main() {
 ## 6. The ABA Problem
 
 ### What Is ABA?
+
+The ABA problem is a subtle bug in lock-free algorithms that use CAS. It occurs when a value changes from A to B and back to A while a thread is paused — the CAS sees the original value A and wrongly assumes nothing changed, even though the underlying data structure may have been modified.
 
 ```
 Thread 1: reads head = A, prepares to CAS(A → B)

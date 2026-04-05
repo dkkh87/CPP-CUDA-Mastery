@@ -1,5 +1,7 @@
 # Chapter 37 — C++26: The Bleeding Edge
 
+The following tags identify the proposed and accepted C++26 features discussed in this chapter, including contracts, static reflection, and pattern matching.
+
 ```yaml
 tags: [cpp26, contracts, static-reflection, pattern-matching, std-execution, hazard-pointers, rcu, inplace-vector]
 ```

@@ -127,6 +127,9 @@ int main(int argc, char* argv[]) {
 ```
 
 **Usage:**
+
+These commands compile the exit-code program and demonstrate how the shell captures the return value. Running without arguments triggers the error path (exit code 1), while providing a name produces a greeting (exit code 0). The `echo $?` command prints the exit code so you can verify the program's success or failure status.
+
 ```bash
 g++ -std=c++17 -o greet exit_code.cpp
 ./greet              # Prints error, exit code 1
@@ -171,6 +174,9 @@ int main() {
 ```
 
 **Compile multi-file:**
+
+This command compiles both source files together and links them into a single executable. The `-Wall` flag enables all common warnings so the compiler can alert you to potential mistakes. You must list every `.cpp` file on the command line — the compiler does not automatically find them.
+
 ```bash
 g++ -std=c++17 -Wall -o calc main.cpp math_utils.cpp
 ./calc
@@ -192,6 +198,9 @@ add_executable(hello main.cpp math_utils.cpp)
 ```
 
 **Build with CMake:**
+
+These commands create an out-of-source build directory, run CMake to generate the build system, then compile the project. Building in a separate `build/` folder keeps generated files out of your source tree, making it easy to clean up by simply deleting the folder.
+
 ```bash
 mkdir build && cd build
 cmake ..
