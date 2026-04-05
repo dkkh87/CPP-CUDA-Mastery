@@ -59,6 +59,8 @@ flowchart LR
 
 ### 3.1 The CUDA Kernel (`relu_cuda_kernel.cu`)
 
+This CUDA file implements a custom fused ReLU+Scale operation with both forward and backward kernels. The forward kernel zeros negative values and scales positives, while the backward kernel routes gradients only through positions that were positive in the forward pass. The `AT_DISPATCH_FLOATING_TYPES` macro generates separate kernel instantiations for float and double at compile time.
+
 ```cuda
 // relu_cuda_kernel.cu — Custom fused ReLU + scale kernel
 #include <torch/extension.h>
@@ -131,6 +133,8 @@ torch::Tensor relu_scale_backward_cuda(
 
 ### 3.2 The C++ Binding File (`relu_scale.cpp`)
 
+This binding file bridges CUDA kernels to Python via pybind11. It wraps the forward/backward CUDA calls in a `torch::autograd::Function` so PyTorch's autograd engine automatically calls our custom backward kernel during `loss.backward()`. The `PYBIND11_MODULE` block exports the functions as a Python-importable module.
+
 ```cpp
 // relu_scale.cpp — pybind11 bindings + autograd Function
 #include <torch/extension.h>
@@ -193,6 +197,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
 ### 3.3 Setuptools Build (`setup.py`)
 
+This setup.py uses `CUDAExtension` to compile both the C++ binding and CUDA kernel files into an installable Python package. The `extra_compile_args` pass optimization flags to both the host C++ compiler and NVIDIA's nvcc CUDA compiler.
+
 ```python
 # setup.py — Build the extension as an installable package
 from setuptools import setup
@@ -222,6 +228,8 @@ setup(
 
 ### 3.4 JIT Compilation Alternative
 
+For development, JIT compilation is faster than setuptools — `load()` compiles the extension on first call and caches the result, automatically recompiling when source files change.
+
 ```python
 # jit_load.py — Compile on-the-fly, no setup.py needed
 from torch.utils.cpp_extension import load
@@ -237,6 +245,8 @@ relu_scale_cuda = load(
 ```
 
 ### 3.5 Python Usage
+
+This shows how to use the compiled CUDA extension from Python — calling `relu_scale` triggers our custom CUDA kernel on GPU, and `backward()` automatically invokes our custom gradient kernel. The extension integrates seamlessly into standard `nn.Module` classes.
 
 ```python
 # train_with_extension.py
@@ -261,6 +271,8 @@ class ScaledReLUNet(torch.nn.Module):
 
 ## 4. torch::Tensor C++ API Essentials
 
+The `torch::Tensor` C++ API mirrors PyTorch's Python API almost exactly — creation, device transfer, indexing, and operations all use familiar syntax. This is the type shared across Python and C++ boundaries, so no data copying occurs when passing tensors between them.
+
 ```cpp
 #include <torch/torch.h>
 
@@ -280,6 +292,8 @@ void tensor_api_demo() {
 ## 5. LibTorch — Pure C++ Inference
 
 ### 5.1 Export from Python (TorchScript)
+
+Before deploying in C++, the PyTorch model must be serialized to TorchScript format. `torch.jit.trace` records the operations by running a concrete example input (best for static graphs), while `torch.jit.script` parses the Python source to preserve control flow like if/else and loops.
 
 ```python
 # export_model.py — Serialize model for C++ inference
@@ -333,6 +347,8 @@ flowchart TB
 
 ### 5.3 C++ Inference Application
 
+This standalone C++ application loads a TorchScript model and runs inference without any Python dependency — ideal for embedded systems, microservices, or latency-critical applications. It demonstrates model loading, GPU transfer, forward pass execution, and latency benchmarking.
+
 ```cpp
 // inference.cpp — Pure C++ inference, no Python dependency
 #include <torch/script.h>
@@ -384,6 +400,8 @@ int main(int argc, const char* argv[]) {
 
 ### 5.4 CMakeLists.txt for LibTorch
 
+This CMake configuration links against LibTorch's shared libraries. The `CMAKE_PREFIX_PATH` must point to the downloaded LibTorch directory so CMake can find the Torch package.
+
 ```cmake
 cmake_minimum_required(VERSION 3.18)
 project(libtorch_inference LANGUAGES CXX)
@@ -397,6 +415,8 @@ target_link_libraries(inference "${TORCH_LIBRARIES}")
 Build: `mkdir build && cd build && cmake -DCMAKE_PREFIX_PATH=/path/to/libtorch .. && cmake --build .`
 
 ## 6. C++ Training Loop with LibTorch
+
+This demonstrates a complete training loop written entirely in C++ using LibTorch — defining a ConvNet model, loading MNIST data, running forward/backward passes, and optimizing with Adam. This is useful when Python cannot be used in the training environment (e.g., embedded or real-time systems).
 
 ```cpp
 // train.cpp — Full training loop in C++, no Python
@@ -482,6 +502,8 @@ Build a C++ app that loads a TorchScript ResNet-18, preprocesses images with Ope
 
 ### Solution 1 — CPU Extension
 
+This minimal CPU extension doubles a tensor's values. The `PYBIND11_MODULE` macro exposes the C++ function to Python with automatic tensor type conversion.
+
 ```cpp
 // double_op.cpp
 #include <torch/extension.h>
@@ -496,8 +518,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 }
 ```
 
+This Python test JIT-compiles the C++ extension and verifies the output matches `x * 2`.
+
 ```python
-# test_double.py
 from torch.utils.cpp_extension import load
 import torch
 
@@ -509,6 +532,8 @@ print("Passed:", result)
 ```
 
 ### Solution 2 — CUDA Softmax (key kernel)
+
+This CUDA kernel implements numerically stable softmax by subtracting the row maximum before exponentiation — preventing floating-point overflow. Each thread block processes one row, making it simple but effective for moderate row counts.
 
 ```cuda
 // softmax_kernel.cu — one block per row for simplicity
@@ -547,6 +572,8 @@ torch::Tensor softmax_forward_cuda(torch::Tensor input) {
 ```
 
 ### Solution 3 — Autograd Backward (binding excerpt)
+
+This wraps the custom softmax CUDA kernel in a `torch::autograd::Function`, implementing the analytical softmax backward formula: `dL/dx_i = S_i * (dL/dS_i - Σ_j(dL/dS_j * S_j))`. This lets PyTorch automatically compute gradients through our custom operation.
 
 ```cpp
 // Wrap softmax_forward_cuda in autograd::Function
