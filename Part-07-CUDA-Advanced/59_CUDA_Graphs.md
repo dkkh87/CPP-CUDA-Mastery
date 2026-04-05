@@ -397,6 +397,8 @@ flowchart LR
 
 ### Solution 1 (🟢)
 
+This solution captures two back-to-back `cudaMemcpyAsync` calls (host-to-device, then device-to-host) into a CUDA graph using stream capture. The graph is instantiated once and then launched 100 times, demonstrating that repeated identical transfer sequences benefit from graph replay — each launch avoids the CPU-side overhead of re-issuing both memory copy commands individually.
+
 ```cpp
 #include <cuda_runtime.h>
 #include <cstdio>
@@ -447,6 +449,8 @@ int main() {
 ```
 
 ### Solution 3 (🟡)
+
+This solution builds an explicit CUDA graph with a diamond dependency pattern: a root memset node fans out to two independent kernel branches (`branchA` and `branchB`) that execute in parallel, and both feed into a `merge` kernel that combines their outputs. It then times 1000 graph launches using CUDA events to benchmark the per-launch overhead, demonstrating how explicit graph construction lets you express parallelism that a linear stream cannot.
 
 ```cpp
 #include <cuda_runtime.h>

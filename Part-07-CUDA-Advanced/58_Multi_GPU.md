@@ -79,6 +79,8 @@ Multi-GPU programming is the use of two or more GPUs within a single application
 
 ### 3.1 — Multi-GPU Device Query and Selection
 
+This program enumerates every CUDA-capable GPU in the system, prints its properties (name, memory, SM count), and checks whether peer-to-peer access is available between each pair of devices. It demonstrates `cudaGetDeviceCount`, `cudaGetDeviceProperties`, and `cudaDeviceCanAccessPeer` — the first functions you call in any multi-GPU application to discover the hardware topology before distributing work.
+
 ```cuda
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -133,6 +135,8 @@ int main() {
 ```
 
 ### 3.2 — Peer-to-Peer Memory Access and Transfer
+
+This example enables peer-to-peer (P2P) access between GPU 0 and GPU 1, then demonstrates two forms of cross-GPU communication: an explicit `cudaMemcpyPeer` that copies data directly between devices without staging through host memory, and a kernel on GPU 1 that reads GPU 0's memory via P2P-mapped pointers. This is how NVLink-connected GPUs share data at full interconnect bandwidth, which is critical for multi-GPU data pipelines.
 
 ```cuda
 #include <cstdio>
@@ -228,6 +232,8 @@ int main() {
 ```
 
 ### 3.3 — NCCL AllReduce Example
+
+This program uses the NCCL library to perform an AllReduce (sum) across all available GPUs. Each GPU initializes its send buffer with a distinct value, and after the AllReduce every GPU's receive buffer contains the element-wise sum. NCCL is the standard for gradient synchronization in distributed deep learning — it automatically picks the optimal algorithm (ring, tree, or direct) based on the system's NVLink/NVSwitch topology and message size.
 
 ```cuda
 #include <cstdio>
@@ -333,6 +339,8 @@ int main() {
 ```
 
 ### 3.4 — Multi-GPU Vector Addition with Data Splitting
+
+This example splits a large vector addition across all available GPUs using the data-parallel pattern. Each GPU receives a contiguous chunk of the input arrays via asynchronous pinned-memory transfers, runs the addition kernel on its chunk, and copies results back — all overlapped using per-GPU streams. This is the foundational pattern behind data-parallel training: partition data, compute independently, then combine results.
 
 ```cuda
 #include <cstdio>
@@ -553,6 +561,9 @@ Implement a compute-heavy kernel (e.g., large vector dot product). Run it on 1, 
 See Code Example 3.1 — it enumerates all devices and checks P2P between all pairs.
 
 ### Solution 2 — P2P Bandwidth Benchmark (Core Loop)
+
+This snippet measures peer-to-peer transfer bandwidth by copying increasingly large buffers from GPU 0 to GPU 1 using `cudaMemcpyPeer` and timing each transfer with CUDA events. It prints the achieved bandwidth in GB/s for each buffer size, letting you see how P2P throughput scales with transfer size and revealing the difference between NVLink and PCIe interconnects.
+
 ```cuda
 // After enabling P2P and allocating d_src on GPU 0, d_dst on GPU 1:
 for (size_t size = 1 << 20; size <= (1 << 28); size <<= 1) {
