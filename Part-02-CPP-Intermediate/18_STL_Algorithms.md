@@ -107,6 +107,8 @@ sorting, transforming, accumulating — without coupling to any specific contain
 
 ### 3.1 Sorting with Custom Comparators
 
+This example sorts a vector of `Employee` structs by salary (descending) with ties broken by name (ascending). It demonstrates how to pass a lambda comparator to `std::sort` and uses C++17 structured bindings to cleanly iterate over the sorted results.
+
 ```cpp
 // file: sort_demo.cpp
 // compile: g++ -std=c++20 -O2 -o sort_demo sort_demo.cpp
@@ -142,6 +144,8 @@ int main() {
 
 ### 3.2 find, find_if, count, count_if
 
+This program demonstrates the four primary search-and-count algorithms. `find` locates an exact value, `find_if` takes a predicate (here, checking for even numbers), and `count`/`count_if` return how many elements match a value or condition. These are O(n) linear scans that work with any input iterator.
+
 ```cpp
 // file: find_count.cpp
 // compile: g++ -std=c++20 -O2 -o find_count find_count.cpp
@@ -169,6 +173,8 @@ int main() {
 ```
 
 ### 3.3 transform and accumulate
+
+This code applies a 10% discount to a vector of prices using `std::transform` (which modifies elements in-place via matching source and destination iterators), then sums the result with `std::accumulate`. It also shows `accumulate` with a custom binary operator (`std::multiplies`) to compute a product, demonstrating how the same algorithm adapts to different operations.
 
 ```cpp
 // file: transform_accum.cpp
@@ -198,6 +204,8 @@ int main() {
 
 ### 3.4 The Erase–Remove Idiom and `std::erase_if` (C++20)
 
+This example contrasts the classic erase–remove idiom with the simpler C++20 `std::erase_if`. The classic approach uses `std::remove_if` to shift surviving elements forward (returning an iterator to the new logical end), then calls `erase()` to actually shrink the container. The C++20 one-liner does both steps in a single call.
+
 ```cpp
 // file: erase_remove.cpp
 // compile: g++ -std=c++20 -O2 -o erase_remove erase_remove.cpp
@@ -226,6 +234,8 @@ int main() {
 
 ### 3.5 copy, unique, and Iterator Adaptors
 
+This example demonstrates how `std::unique` removes consecutive duplicate elements (which is why the data must be sorted first), and how `std::copy` paired with `std::ostream_iterator` streams results directly to `stdout` — a common pattern for quick output without writing a manual loop.
+
 ```cpp
 // file: copy_unique.cpp
 // compile: g++ -std=c++20 -O2 -o copy_unique copy_unique.cpp
@@ -250,6 +260,8 @@ int main() {
 ```
 
 ### 3.6 Parallel Algorithms (C++17)
+
+This benchmark compares sequential vs parallel `std::sort` on 10 million integers. The only code difference is the execution policy (`std::execution::seq` vs `std::execution::par`). This demonstrates how C++17 parallel algorithms can speed up large-data operations with minimal code changes — just link against Intel TBB (`-ltbb`).
 
 ```cpp
 // file: parallel_sort.cpp
@@ -284,6 +296,8 @@ int main() {
 > **Note:** Link with `-ltbb` (Intel TBB) on GCC/Clang for parallel execution support.
 
 ### 3.7 C++20 Ranges — Pipes, Views, and Projections
+
+This example builds a lazy pipeline using C++20 ranges to filter, sort, and transform a list of tasks. Views like `filter` and `transform` are composed with the pipe (`|`) operator and evaluated on-demand — no intermediate containers are allocated. The `ranges::sort` call uses a projection (`&Task::priority`) to sort by a member field without writing a custom comparator.
 
 ```cpp
 // file: ranges_demo.cpp
@@ -380,6 +394,8 @@ most frequent words. Use C++20 ranges and views wherever possible.
 
 ### S1: Top-N Filter
 
+This solution uses `std::nth_element` to partition the vector so the top N largest values end up in the last N positions — in O(n) average time, much faster than a full sort. It then sorts only those N elements with `std::greater` for descending output.
+
 ```cpp
 #include <algorithm>
 #include <iostream>
@@ -404,6 +420,8 @@ int main() {
 
 ### S2: Vowel Counter
 
+This solution wraps `std::count_if` in a function, using a lambda that converts each character to lowercase before checking against the five vowels. The `static_cast<unsigned char>` ensures `tolower` handles all character values safely, avoiding undefined behavior with negative `char` values.
+
 ```cpp
 #include <algorithm>
 #include <iostream>
@@ -422,6 +440,8 @@ int main() {
 ```
 
 ### S3: Remove Duplicates (Preserving Order)
+
+This solution uses `std::remove_if` with a captured `unordered_set` to track which words have already been seen. The `insert().second` trick returns `false` if the word was already in the set, marking it for removal. This preserves first-occurrence order without sorting the vector.
 
 ```cpp
 #include <algorithm>
@@ -447,6 +467,8 @@ int main() {
 ```
 
 ### S4: Parallel Sum vs Serial Sum
+
+This solution generates 50 million random doubles and compares `std::reduce` with sequential vs parallel execution policies. `reduce` (not `accumulate`) is used because it allows out-of-order evaluation, which is required for parallel execution. The timing wrapper measures wall-clock time to show the speedup from multi-threading.
 
 ```cpp
 // compile: g++ -std=c++20 -O2 -ltbb -o par_reduce par_reduce.cpp
@@ -478,6 +500,8 @@ int main() {
 ```
 
 ### S5: Ranges Word Frequency (Sketch)
+
+This solution reads words from stdin, normalizes them to lowercase with `std::ranges::transform`, filters out words shorter than 4 characters, and counts frequencies in a `std::map`. It then sorts entries by count (descending) using a range sort with projection, and displays the top 10 using `std::views::take`.
 
 ```cpp
 // compile: g++ -std=c++20 -O2 -o word_freq word_freq.cpp

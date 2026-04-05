@@ -94,6 +94,8 @@ flowchart TD
 
 ### Sequence Containers
 
+This example demonstrates the four main sequence containers — `vector`, `deque`, `list`, and `forward_list` — highlighting how each manages elements differently. Notice how `vector` tracks capacity vs size during growth, `deque` supports fast insertion at both ends, and `list`/`forward_list` offer node-based operations like `sort()` and `unique()` as member functions.
+
 ```cpp
 #include <iostream>
 #include <vector>
@@ -132,6 +134,8 @@ int main() {
 
 ### Associative Containers (Red-Black Tree)
 
+This code shows `set`, `map`, and `multimap` — all backed by red-black trees that keep elements sorted automatically. Key patterns include `emplace` for in-place construction, `insert_or_assign` (C++17) for upsert semantics, structured bindings for clean iteration, and `equal_range` for retrieving all values under a duplicate key in a `multimap`.
+
 ```cpp
 #include <iostream>
 #include <set>
@@ -164,6 +168,8 @@ int main() {
 
 ### Unordered Containers (Hash Tables)
 
+This example builds a word-frequency counter using `unordered_map` and shows how to inspect the underlying hash table — bucket count, load factor, and per-bucket sizes. The `rehash()` call forces the table to allocate at least 50 buckets, demonstrating how you can control memory layout to reduce collisions.
+
 ```cpp
 #include <iostream>
 #include <unordered_map>
@@ -192,6 +198,8 @@ int main() {
 
 ### Container Adaptors
 
+Container adaptors wrap an underlying container (usually `deque`) and expose a restricted interface. This example demonstrates `stack` (LIFO access), `queue` (FIFO access), and `priority_queue` configured as a min-heap using `std::greater` so the smallest element is always on top.
+
 ```cpp
 #include <iostream>
 #include <stack>
@@ -218,6 +226,8 @@ int main() {
 ```
 
 ### Insertion Benchmark Pattern
+
+This benchmark measures raw insertion time across four container types — `vector`, `list`, `set`, and `unordered_set`. It uses `if constexpr` to handle API differences (`push_back` vs `insert`) at compile time, and `reserve()` is called on `vector` and `unordered_set` to isolate insertion cost from reallocation overhead.
 
 ```cpp
 #include <iostream>
@@ -257,6 +267,8 @@ int main() {
 > **Note:** Always `reserve()` before benchmarking to isolate insertion cost from reallocation. Use Google Benchmark for production profiling.
 
 ### Iterator Invalidation Examples
+
+This code illustrates the most common iterator invalidation pitfalls. For `vector`, any `push_back` may trigger reallocation and invalidate all iterators — the safe workaround is index-based access. For `map`, insert and erase never invalidate other iterators. For `unordered_map`, a `reserve()` or rehash invalidates everything, so you must re-acquire iterators afterward.
 
 ```cpp
 #include <iostream>
@@ -335,6 +347,8 @@ Build a templated benchmark that measures insert, find, erase for `vector`, `lis
 <details>
 <summary>🟢 Word Frequency Counter</summary>
 
+This solution reads words from a string using `istringstream`, counts each word's frequency with `std::map` (which keeps keys alphabetically sorted), and prints the results using structured bindings. The `operator[]` on the map auto-initializes missing keys to zero.
+
 ```cpp
 #include <iostream>
 #include <map>
@@ -352,6 +366,8 @@ int main() {
 
 <details>
 <summary>🟡 LRU Cache</summary>
+
+This implements an O(1) LRU (Least Recently Used) cache by combining `std::list` (for access-order tracking) with `std::unordered_map` (for O(1) key lookup). The `list::splice` operation moves a recently accessed node to the front in constant time, and eviction simply removes the back node when capacity is exceeded.
 
 ```cpp
 #include <iostream>
@@ -399,6 +415,8 @@ int main() {
 
 <details>
 <summary>🔴 Container Benchmark Suite</summary>
+
+This full benchmark suite measures both insert and find performance across `vector`, `list`, `set`, and `unordered_set` at multiple data sizes (1K–100K). It uses `if constexpr` to select the correct API at compile time and outputs CSV-formatted results for easy analysis. Random data is generated via `std::mt19937` with a fixed seed for reproducibility.
 
 ```cpp
 #include <iostream>
