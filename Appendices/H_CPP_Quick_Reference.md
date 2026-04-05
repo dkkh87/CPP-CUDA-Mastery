@@ -24,6 +24,8 @@
 
 ### Type Deduction & Aliases
 
+These examples show C++ type deduction: `auto` lets the compiler infer the type, `decltype` copies the type of an existing expression, and `using` creates readable type aliases including template aliases.
+
 ```cpp
 auto x = 42;                     // int
 decltype(x) w = x;               // same type as x
@@ -100,6 +102,8 @@ auto fd = std::unique_ptr<FILE, decltype(&fclose)>(fopen("f","r"), fclose);
 
 ## 4. STL Algorithms Cheat Sheet
 
+This reference covers the most commonly used STL algorithms. They operate on iterator ranges and can be customized with lambdas. The C++20 `std::ranges` versions accept containers directly without `.begin()/.end()`.
+
 ```cpp
 #include <algorithm>
 #include <numeric>   // accumulate, reduce, iota
@@ -144,6 +148,8 @@ std::iota(v.begin(), v.end(), 1);   // 1,2,3,4,5
 
 ## 5. Lambda Syntax
 
+Lambda syntax follows the pattern `[captures](params) -> return { body }`. Captures control which outside variables the lambda can access. C++14 added generic lambdas with `auto`, C++20 added template lambdas, and C++23 added recursive lambdas via deducing `this`.
+
 ```cpp
 auto f = [captures](params) mutable noexcept -> RetType { body };
 
@@ -173,6 +179,8 @@ auto fib = [](this auto self, int n) -> int {
 
 ## 6. Move Semantics Quick Reference
 
+Move semantics let you transfer ownership of resources (like heap memory) instead of copying them. `std::move` casts an object to an rvalue reference, enabling the move constructor/assignment. Perfect forwarding with `std::forward` preserves the value category through template layers.
+
 ```cpp
 std::string a = "hello";
 std::string b = std::move(a);  // a is now valid-but-unspecified
@@ -201,6 +209,8 @@ auto make(Args&&... args) { return T(std::forward<Args>(args)...); }
 ---
 
 ## 7. Template Syntax
+
+This covers C++ template syntax from basic function/class templates through C++20 concepts (type constraints), CTAD (class template argument deduction), `if constexpr` (compile-time branching), and fold expressions (variadic template operations).
 
 ```cpp
 // Function template
@@ -278,6 +288,8 @@ template <typename... Args> auto sum(Args... a) { return (a + ...); }
 
 ## 9. Concurrency Quick Reference
 
+This reference covers C++ concurrency primitives: threads (`std::jthread` auto-joins), mutexes (use RAII locks, never raw lock/unlock), atomics (lock-free shared state), condition variables (producer-consumer signaling), futures/promises (async results), and C++20 latches/barriers/semaphores.
+
 ```cpp
 #include <thread>
 #include <mutex>
@@ -326,6 +338,8 @@ std::counting_semaphore<4> sem(4);  // acquire() / release()
 
 ## 10. Common Type Traits
 
+Type traits let you query and transform types at compile time. The `_v` suffix gives a `bool` value (e.g., `is_integral_v<int>` is `true`), and the `_t` suffix gives a transformed type (e.g., `remove_const_t<const int>` is `int`). Prefer C++20 concepts over SFINAE for constraining templates.
+
 ```cpp
 #include <type_traits>  // use _v suffix for values, _t for types
 
@@ -353,6 +367,8 @@ std::enable_if_t<std::is_integral_v<T>, T> checked_add(T a, T b);
 ---
 
 ## 11. String Operations
+
+This covers standard string operations: searching (`find`, `rfind`), modification (`substr`, `replace`, `insert`), C++20/23 additions (`starts_with`, `contains`), conversions (`stoi`, `to_string`), non-owning views (`string_view`), and formatted output (`std::format`, `std::println`).
 
 ```cpp
 std::string s = "Hello, World!";
@@ -390,6 +406,8 @@ std::println("x = {}", 42);
 ---
 
 ## 12. Error Handling Patterns
+
+C++ offers multiple error handling strategies for different situations. Exceptions work well for application logic, `std::optional` for values that may be absent, `std::expected` (C++23) for operations that return either a value or a typed error, and error codes for performance-critical paths like GPU kernels.
 
 ```cpp
 // ── Exceptions ──
@@ -453,6 +471,8 @@ These two command lines show the recommended compiler invocations for developmen
 ```
 
 ### Attributes
+
+C++ attributes provide hints to the compiler. `[[nodiscard]]` warns if a return value is ignored, `[[likely]]` hints branch prediction, `[[no_unique_address]]` enables empty base optimization, and `[[assume]]` (C++23) gives the optimizer guaranteed conditions.
 
 ```cpp
 [[nodiscard]]            // warn if return value ignored

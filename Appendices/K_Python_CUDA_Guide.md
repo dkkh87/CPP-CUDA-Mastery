@@ -67,6 +67,8 @@ pip install cupy-cuda12x   # For CUDA 12.x
 
 ### Matrix Multiply + FFT + Custom Kernel
 
+This example shows CuPy's three levels of GPU programming: high-level operations (matrix multiply, FFT) that use optimized CUDA libraries under the hood, and a custom `ElementwiseKernel` that lets you write CUDA C expressions directly in Python for element-wise operations.
+
 ```python
 import cupy as cp, numpy as np, time
 
@@ -97,6 +99,8 @@ print(relu(cp.array([-1, 0, 1, 2, -3], dtype=cp.float32)))  # [0. 0. 1. 2. 0.]
 ```
 
 ### CuPy RawKernel — Full CUDA C in Python
+
+CuPy's `RawKernel` lets you write a full CUDA C kernel as a Python string, compile it at runtime, and launch it with explicit grid/block dimensions. This is useful for prototyping CUDA algorithms before porting them to C++.
 
 ```python
 import cupy as cp
@@ -148,6 +152,8 @@ pip install numba
 
 ### Vector Addition
 
+This shows Numba's `@cuda.jit` decorator which compiles a Python function into a GPU kernel. The `cuda.grid(1)` helper computes the global thread index. Data is explicitly transferred to/from the GPU using `cuda.to_device` and `copy_to_host`.
+
 ```python
 from numba import cuda
 import numpy as np, math
@@ -167,6 +173,8 @@ print("Vector addition verified ✓")
 ```
 
 ### Matrix Multiply with Shared Memory Tiling
+
+This Numba kernel implements matrix multiplication with shared memory tiling — the same optimization used in CUDA C. Each block loads tiles of A and B into `cuda.shared.array`, synchronizes with `cuda.syncthreads()`, and accumulates partial dot products.
 
 ```python
 from numba import cuda, float32
@@ -206,6 +214,8 @@ print("Shared-memory matmul verified ✓")
 ```
 
 ### Parallel Reduction (Sum)
+
+This implements parallel reduction (summing an array) in Numba. Each block reduces its chunk in shared memory using a tree-based algorithm, then writes one partial sum per block. The host sums the partial results for the final answer.
 
 ```python
 from numba import cuda, float32
@@ -261,6 +271,8 @@ pip install triton   # Ships its own CUDA compiler
 
 ### Vector Addition
 
+This Triton kernel adds two vectors using block-level programming. Instead of thinking per-thread like CUDA, you think per-block: `tl.arange` creates a range of offsets, `tl.load/tl.store` handle vectorized memory access, and `mask` prevents out-of-bounds access.
+
 ```python
 import torch, triton, triton.language as tl
 
@@ -281,6 +293,8 @@ print("Triton vector add verified ✓")
 ```
 
 ### Matrix Multiply (Tiled, with Autotuning)
+
+This Triton matrix multiplication uses `@triton.autotune` to automatically test multiple tile size configurations and pick the fastest one. The `tl.dot` operation maps to hardware matrix multiply (including Tensor Cores on supported GPUs), achieving near-cuBLAS performance.
 
 ```python
 import torch, triton, triton.language as tl
@@ -327,6 +341,8 @@ print("Triton matmul verified ✓")
 ```
 
 ### Fused Softmax
+
+This Triton kernel computes softmax row-by-row in a single fused pass: load the row, subtract the max for numerical stability, exponentiate, normalize by the sum. Fusing all operations into one kernel avoids multiple memory round-trips.
 
 ```python
 import torch, triton, triton.language as tl
@@ -425,6 +441,8 @@ D = torch.nn.functional.softmax(A, dim=-1)  # fused GPU kernel
 
 ### Proper GPU Timing
 
+GPU timing requires CUDA events because Python's `time.time()` doesn't account for asynchronous GPU execution. Events are recorded into the GPU command stream and `synchronize` waits for completion before measuring elapsed time.
+
 ```python
 start = torch.cuda.Event(enable_timing=True)
 end = torch.cuda.Event(enable_timing=True)
@@ -436,6 +454,8 @@ print(f"{start.elapsed_time(end)/100:.2f} ms per matmul")
 ```
 
 ### Custom CUDA Extension (inline)
+
+PyTorch's `load_inline` compiles a CUDA C kernel and makes it callable from Python as a regular function. This lets you write custom GPU operations (like this GELU activation) without creating a separate build system.
 
 ```python
 from torch.utils.cpp_extension import load_inline
@@ -462,6 +482,8 @@ print(f"Max diff: {(mod.fast_gelu(A) - torch.nn.functional.gelu(A)).abs().max():
 
 ### torch.compile
 
+`torch.compile` applies the TorchDynamo JIT compiler to automatically fuse operations, optimize memory access patterns, and generate efficient GPU code from standard PyTorch model definitions.
+
 ```python
 model = torch.nn.Sequential(
     torch.nn.Linear(1024, 2048), torch.nn.ReLU(), torch.nn.Linear(2048, 1024)
@@ -472,6 +494,8 @@ compiled = torch.compile(model)  # Fuses ops, optimizes memory access
 ---
 
 ## 7. JAX — GPU-Accelerated NumPy with XLA
+
+JAX provides four core transforms that compose: `jit` compiles functions to GPU via XLA, `vmap` automatically vectorizes over batch dimensions, `grad` computes gradients via automatic differentiation, and `pmap` distributes computation across multiple GPUs.
 
 ```bash
 pip install jax[cuda12]
@@ -500,6 +524,8 @@ def parallel_matmul(A, B): return A @ B
 ```
 
 ### Custom Kernels with Pallas (JAX's Triton-like DSL)
+
+Pallas is JAX's low-level kernel DSL (similar to Triton) that lets you write custom GPU kernels using block-based programming. You define a kernel function that operates on block references, and Pallas handles the grid mapping and memory management.
 
 ```python
 from jax.experimental import pallas as pl
@@ -627,6 +653,8 @@ Stage 5: CUDA C++      → full hardware access
 
 ### The Hybrid Approach
 
+This hybrid approach keeps most of the model in Python (using PyTorch for standard layers) while calling a custom C++ CUDA kernel for the performance-critical attention operation. This gives you the best of both worlds: Python productivity plus C++ performance where it matters.
+
 ```python
 import torch
 from my_cuda_ext import fast_attention  # C++ CUDA kernel
@@ -639,6 +667,8 @@ class MyModel(torch.nn.Module):
 ```
 
 Build with:
+
+This `setup.py` file uses PyTorch's `CUDAExtension` build system to compile your `.cu` files into a Python-importable module. The `extra_compile_args` pass optimization flags to `nvcc`.
 
 ```python
 # setup.py

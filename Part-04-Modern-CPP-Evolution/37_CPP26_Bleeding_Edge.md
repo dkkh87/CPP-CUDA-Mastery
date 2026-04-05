@@ -48,6 +48,8 @@ Additional features — `std::inplace_vector`, hazard pointers, RCU, and pattern
 
 ## 1. Contracts — pre / post / contract_assert
 
+C++26 contracts let you attach preconditions (`pre`) and postconditions (`post`) directly to function signatures, replacing the old `assert()` macro with compiler-aware annotations. Unlike `assert()`, which is a blunt preprocessor macro that can only be globally enabled or disabled via `NDEBUG`, contracts support multiple build modes (observe, enforce, ignore) and give compilers and static analyzers machine-readable invariants. The `contract_assert` keyword replaces `assert()` inside function bodies with the same configurable semantics.
+
 ```cpp
 // STATUS: Accepted (P2900) — C++26
 
@@ -87,6 +89,8 @@ public:
 ---
 
 ## 2. Static Reflection — ^T, meta::info
+
+Static reflection introduces the `^` operator that produces a `meta::info` object representing a type's full compile-time structure — its members, enumerators, and signatures. This replaces the fragile template metaprogramming and preprocessor macros previously needed for tasks like enum-to-string conversion or automatic JSON serialization. The splice operator `[:expr:]` injects reflected information back into code, enabling zero-overhead, fully generic struct introspection without any external code generators.
 
 ```cpp
 // STATUS: Accepted (P2996/P3394) — C++26
@@ -128,6 +132,8 @@ struct Point { double x; double y; double z; };
 
 ## 3. Pattern Matching — inspect (Proposed)
 
+Pattern matching with `inspect` is a proposed C++26 feature that would let you match values against patterns (literal values, types, conditions) in a concise expression-based syntax, similar to `match` in Rust or `when` in Kotlin. Since this is not yet accepted, the code below shows both the proposed syntax (commented out) and a workaround using `std::visit` with `if constexpr` — the best approximation available in C++17 today.
+
 ```cpp
 // STATUS: Proposed (P2688) — NOT yet accepted. Syntax may change.
 
@@ -164,6 +170,8 @@ double area_today(const Shape& s) {
 ---
 
 ## 4. std::execution — Senders and Receivers
+
+The `std::execution` framework replaces the broken `std::async`/`std::future` model with composable, lazy sender/receiver pipelines. Work is described as a graph of senders connected with `|` (pipe), and nothing executes until `sync_wait()` is called — eliminating the accidental blocking and lifetime issues of `std::future`. Senders can target any scheduler (thread pools, GPU runtimes, I/O rings), making this the foundation for structured concurrency in C++.
 
 ```cpp
 // STATUS: Accepted (P2300) — C++26
@@ -204,6 +212,8 @@ void parallel_work() {
 ---
 
 ## 5. Hazard Pointers and RCU
+
+Hazard pointers and RCU (Read-Copy-Update) are lock-free memory reclamation techniques borrowed from Linux kernel programming, now standardized in C++26. Hazard pointers let a reader announce "I'm using this pointer" so the writer won't free it prematurely — solving the safe reclamation problem in lock-free data structures. RCU optimizes for read-heavy workloads: readers enter a near-zero-cost critical section with no locks or atomics, while writers publish new versions and defer deletion of old data until all current readers finish.
 
 ```cpp
 // STATUS: Both Accepted — C++26  (Hazard: P2530 | RCU: P2545)
@@ -251,6 +261,8 @@ void writer(const std::string& name, int port) {
 ---
 
 ## 6. std::inplace_vector
+
+`std::inplace_vector<T, N>` is a fixed-capacity, variable-size container that stores all elements inline (on the stack or inside a struct) with zero heap allocation. It fills the gap between `std::array` (fixed size, no push/pop) and `std::vector` (dynamic size, requires heap). This is critical for GPU device code, embedded systems, and real-time applications where `malloc`/`new` is unavailable or too slow. Use `try_push_back()` instead of `push_back()` to avoid exceptions when the buffer is full.
 
 ```cpp
 // STATUS: Accepted (P0843) — C++26
@@ -373,6 +385,9 @@ Implement a lock-free stack with `std::hazard_pointer` providing `push()` and `t
 ## Solutions
 
 ### Solution 1
+
+This solution uses C++26 contracts to guard the `divide` function: a `pre` condition ensures the divisor is never zero, and a `post` condition binds the result `r` to verify that `r * b <= a`, catching integer division invariant violations at the contract level rather than with runtime checks.
+
 ```cpp
 int divide(int a, int b)
     pre(b != 0)
@@ -381,6 +396,9 @@ int divide(int a, int b)
 ```
 
 ### Solution 2
+
+This solution builds an ASCII histogram using `std::inplace_vector<int, 256>` — a stack-only container with capacity for all 256 byte values. By calling `resize(256, 0)` and indexing directly with each character, it avoids any heap allocation, making it suitable for embedded or GPU contexts.
+
 ```cpp
 #include <inplace_vector>
 #include <string_view>
@@ -394,6 +412,9 @@ std::inplace_vector<int, 256> histogram(std::string_view text) {
 ```
 
 ### Solution 3
+
+This solution demonstrates a `std::execution` sender pipeline: `ex::just(1,2,3,4,5)` creates a sender carrying five integers, `then` squares them, and `ex::on` schedules the entire pipeline on a thread pool. Nothing runs until `sync_wait` is called, showing the lazy evaluation model of senders.
+
 ```cpp
 namespace ex = std::execution;
 void run() {
@@ -407,6 +428,9 @@ void run() {
 ```
 
 ### Solution 4
+
+This solution uses C++26 static reflection to generically compare all non-static data members of any struct. The `nonstatic_data_members_of(^T)` call reflects over every field at compile time, and the splice operator `[:dm:]` accesses each member — eliminating the need to manually write per-field equality logic.
+
 ```cpp
 template <typename T>
 constexpr bool struct_equal(const T& a, const T& b) {
@@ -420,6 +444,9 @@ constexpr bool struct_equal(const T& a, const T& b) {
 ```
 
 ### Solution 5
+
+This lock-free stack uses `std::hazard_pointer` from C++26 to safely reclaim memory. In `try_pop`, the hazard pointer's `protect` method announces that the current thread is reading the top node, preventing other threads from freeing it during a concurrent `pop`. Once the node is successfully removed via `compare_exchange_weak`, `retire()` defers deletion until no hazard pointer guards it.
+
 ```cpp
 template <typename T>
 class LockFreeStack {

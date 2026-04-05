@@ -9,6 +9,8 @@
 
 ### Starting GDB
 
+These commands show different ways to launch GDB: running a program directly, passing arguments, attaching to a running process, analyzing a crash dump, or using the split-view TUI mode.
+
 ```bash
 # Basic
 gdb ./my_program
@@ -58,6 +60,8 @@ gdb -tui ./my_program
 
 ### Thread Commands
 
+These GDB commands help debug multi-threaded programs. You can list all threads, switch between them, get backtraces for every thread at once, and lock scheduling to prevent other threads from running during stepping.
+
 ```gdb
 info threads                    # List all threads
 thread 3                        # Switch to thread 3
@@ -69,6 +73,8 @@ break func thread 2             # Breakpoint only for thread 2
 ```
 
 ### STL Pretty Printers
+
+GDB can display STL containers (vectors, maps, etc.) in a human-readable format using pretty printers. This script ensures they are loaded — most GCC installations enable them automatically.
 
 ```bash
 # Usually auto-loaded with GCC. Verify:
@@ -83,6 +89,8 @@ register_libstdcxx_printers(None)
 end
 ```
 
+With pretty printers enabled, GDB shows the logical contents of STL containers instead of raw memory. A `vector` shows its elements, a `map` shows its key-value pairs, and a `unique_ptr` shows the managed pointer address.
+
 ```gdb
 # With pretty printers enabled:
 (gdb) print my_vector
@@ -96,6 +104,8 @@ $3 = std::unique_ptr<MyClass> = {get() = 0x55555576b2c0}
 ```
 
 ### Advanced GDB
+
+These advanced GDB features include reverse debugging (stepping backwards through execution), catching exceptions and system calls, examining raw memory in different formats, and writing custom GDB scripts for repetitive tasks.
 
 ```gdb
 # Reverse debugging (record/replay)
@@ -131,6 +141,8 @@ end
 
 ### Memcheck — Memory Error Detection
 
+These commands run Valgrind's memory checker to detect leaks, buffer overflows, and use-after-free bugs. The `--track-origins=yes` flag traces uninitialized values back to their source, making bugs easier to find.
+
 ```bash
 # Basic usage
 valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
@@ -157,6 +169,8 @@ valgrind --suppressions=my_suppressions.supp ./my_program
 
 ### Cachegrind — Cache Profiling
 
+Cachegrind profiles how your program uses the CPU cache hierarchy. It counts cache misses at each level, helping you identify memory access patterns that cause performance problems.
+
 ```bash
 # Profile cache behavior
 valgrind --tool=cachegrind ./my_program
@@ -176,6 +190,8 @@ cg_diff cachegrind.out.1 cachegrind.out.2
 
 ### Callgrind — Call Graph Profiling
 
+Callgrind records function call counts and costs, generating a detailed call graph. Use KCachegrind to visualize which functions consume the most time and how they relate to each other.
+
 ```bash
 # Profile with call graph
 valgrind --tool=callgrind --callgrind-out-file=callgrind.out ./my_program
@@ -189,6 +205,8 @@ kcachegrind callgrind.out
 ```
 
 ### Helgrind / DRD — Thread Error Detection
+
+These tools detect threading bugs. Helgrind finds data races (concurrent unsynchronized memory access) and potential deadlocks (lock ordering violations). DRD is a lighter-weight alternative.
 
 ```bash
 # Detect data races
@@ -208,6 +226,8 @@ valgrind --tool=drd ./my_program
 ## 3. Compiler Sanitizers
 
 ### AddressSanitizer (ASan) — Memory Errors
+
+Compile your program with AddressSanitizer by adding the `-fsanitize=address` flag. ASan instruments memory accesses at compile time to catch buffer overflows, use-after-free, and memory leaks at runtime with about 2× slowdown.
 
 ```bash
 # Compile
@@ -247,6 +267,8 @@ READ of size 4 at 0x602000000014 thread T0
 
 ### ThreadSanitizer (TSan) — Data Race Detection
 
+ThreadSanitizer requires a separate build (it's incompatible with ASan). It detects data races — situations where multiple threads access the same memory without proper synchronization — at runtime with 5-15× slowdown.
+
 ```bash
 # Compile (separate build — incompatible with ASan)
 g++ -fsanitize=thread -g -O2 main.cpp -o main -lpthread
@@ -274,6 +296,8 @@ WARNING: ThreadSanitizer: data race (pid=12345)
 
 ### UndefinedBehaviorSanitizer (UBSan)
 
+UndefinedBehaviorSanitizer catches C/C++ operations with undefined results, such as integer overflow or null pointer dereference. It has almost no overhead (1.2×) and can be combined with ASan in the same build.
+
 ```bash
 # Compile
 g++ -fsanitize=undefined -g main.cpp -o main
@@ -300,6 +324,8 @@ export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 
 ### MemorySanitizer (MSan) — Uninitialized Memory
 
+MemorySanitizer detects reads of uninitialized memory. It's Clang-only and requires all libraries (including libc++) to be compiled with MSan instrumentation, making it harder to use in practice than the other sanitizers.
+
 ```bash
 # Clang only (not available in GCC)
 clang++ -fsanitize=memory -fno-omit-frame-pointer -g main.cpp -o main
@@ -322,6 +348,8 @@ clang++ -fsanitize=memory -fno-omit-frame-pointer -g main.cpp -o main
 ## 4. CUDA Debugging Tools
 
 ### compute-sanitizer (Replaces cuda-memcheck)
+
+The `compute-sanitizer` tool (successor to `cuda-memcheck`) runs your CUDA program with instrumentation to detect GPU memory errors, race conditions, synchronization bugs, and uninitialized device memory.
 
 ```bash
 # Memory checking (default)
@@ -355,6 +383,8 @@ compute-sanitizer --tool memcheck \
 
 ### cuda-gdb — GPU Debugger
 
+The `cuda-gdb` debugger extends GDB with commands for inspecting GPU state. You can switch between GPU threads and blocks, set breakpoints in kernels with conditions on thread/block indices, and examine device and shared memory.
+
 ```bash
 # Launch
 cuda-gdb ./cuda_program
@@ -380,6 +410,8 @@ cuda-gdb ./cuda_program
 ```
 
 ### Printf Debugging in Kernels
+
+CUDA kernels can use `printf` for quick debugging. Limit output to a single thread (e.g., thread 0) to avoid flooding, and watch for NaN/Inf values that indicate numerical issues.
 
 ```cuda
 __global__ void myKernel(float* data, int N) {
@@ -412,6 +444,8 @@ __global__ void myKernel(float* data, int N) {
 ## 5. Nsight Compute — Kernel Profiling
 
 ### Basic Usage
+
+Nsight Compute (`ncu`) profiles individual CUDA kernels in detail. You can target specific kernels, collect full metric sets for roofline analysis, or query specific metrics like SM throughput and memory bandwidth utilization.
 
 ```bash
 # Profile all kernels
@@ -473,6 +507,8 @@ If both are low → Latency-bound
 
 ### Basic Usage
 
+Nsight Systems (`nsys`) provides a system-wide timeline view showing the interplay between CPU activity, GPU kernels, memory transfers, and API calls. It's the best tool for finding pipeline bottlenecks.
+
 ```bash
 # Profile entire application
 nsys profile -o report ./cuda_program
@@ -490,6 +526,8 @@ nsys profile --trace=cuda,mpi,nvtx mpirun -np 4 ./cuda_mpi_program
 ```
 
 ### NVTX Markers (Annotate Code)
+
+NVTX markers let you annotate your code with named regions that appear in the Nsight Systems timeline. This makes it easy to see which phase (forward pass, backward pass, etc.) each GPU operation belongs to. The RAII wrapper automatically ends the region when the scope exits.
 
 ```cpp
 #include <nvtx3/nvToolsExt.h>
@@ -537,6 +575,8 @@ void process() {
 
 ### Linux perf Basics
 
+Linux `perf` profiles CPU-side performance using hardware counters. It measures cache misses, branch mispredictions, and instruction counts — useful for optimizing the host code that launches and manages GPU work.
+
 ```bash
 # Record CPU performance
 perf record -g -F 99 ./my_program
@@ -554,6 +594,8 @@ perf record -e cache-misses -g ./my_program
 ```
 
 ### Generating Flamegraphs
+
+Flamegraphs visualize `perf` profiling data as an interactive SVG. Wide bars indicate functions that consume the most CPU time. The `inferno` tool is a simpler alternative to the original Perl-based FlameGraph scripts.
 
 ```bash
 # Record
@@ -579,6 +621,8 @@ perf script | inferno-collapse-perf | inferno-flamegraph > flamegraph.svg
 
 ### perf + CUDA
 
+Running `perf` on a CUDA application profiles only the CPU side — it shows CUDA API call overhead and driver activity, but not GPU kernel internals. Use Nsight tools for GPU-side profiling.
+
 ```bash
 # Profile CUDA application (CPU side)
 perf record -g ./cuda_program
@@ -592,6 +636,8 @@ perf record -g ./cuda_program
 ## 8. Common Bug Patterns & Fixes
 
 ### Pattern 1: Use-After-Free
+
+This demonstrates a classic use-after-free bug: returning a pointer to a stack-local variable that gets destroyed when the function exits. The fix is to return by value, which triggers copy elision (NRVO) for zero-cost.
 
 ```cpp
 // BUG
@@ -607,6 +653,8 @@ std::string createString() {
 ```
 
 ### Pattern 2: Double-Free
+
+This shows a double-free bug caused by ambiguous ownership — both the caller and the function try to free the same memory. Using `unique_ptr` makes ownership explicit: whoever holds the pointer owns the memory.
 
 ```cpp
 // BUG
@@ -627,6 +675,8 @@ process(std::move(arr));
 
 ### Pattern 3: Data Race
 
+This demonstrates a data race: multiple threads incrementing a shared counter without synchronization. The fix uses `std::atomic` which provides hardware-level guarantees that the read-modify-write operation is indivisible.
+
 ```cpp
 // BUG
 int counter = 0;
@@ -639,6 +689,8 @@ void increment() { counter.fetch_add(1, std::memory_order_relaxed); }
 
 ### Pattern 4: Deadlock
 
+This shows a deadlock caused by two threads acquiring locks in opposite order. Using `std::scoped_lock` acquires both locks simultaneously using a deadlock-avoidance algorithm.
+
 ```cpp
 // BUG: inconsistent lock ordering
 void thread1() { lock(a); lock(b); }
@@ -650,6 +702,8 @@ void thread2() { std::scoped_lock lk(a, b); }
 ```
 
 ### Pattern 5: CUDA Illegal Memory Access
+
+This demonstrates an out-of-bounds GPU memory access caused by missing bounds checking. GPU threads beyond the array size must be guarded with an `if (idx < N)` check to prevent illegal memory access.
 
 ```cuda
 // BUG: out-of-bounds access
@@ -668,6 +722,8 @@ __global__ void kernel(float* data, int N) {
 ```
 
 ### Pattern 6: CUDA Race Condition in Shared Memory
+
+This shows a shared memory race condition where threads read data that other threads haven't finished writing yet. The `__syncthreads()` barrier ensures all threads complete their writes before any thread reads.
 
 ```cuda
 // BUG: missing synchronization
@@ -689,6 +745,8 @@ __global__ void kernel() {
 
 ### Pattern 7: Iterator Invalidation
 
+This demonstrates iterator invalidation: erasing elements from a vector while iterating over it causes the iterator to become invalid. C++20's `std::erase_if` or the pre-C++20 erase-remove idiom handles this correctly.
+
 ```cpp
 // BUG: modifying container while iterating
 std::vector<int> v = {1, 2, 3, 4, 5};
@@ -706,6 +764,8 @@ v.erase(std::remove_if(v.begin(), v.end(),
 ```
 
 ### Pattern 8: CUDA Forgetting Error Checks
+
+This shows silent CUDA failures caused by unchecked error codes. The `CUDA_CHECK` macro wraps every CUDA API call and kernel launch, printing the error location and message if anything fails.
 
 ```cuda
 // BUG: silent failure

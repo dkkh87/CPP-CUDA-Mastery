@@ -23,6 +23,8 @@ my-project/
 
 ### Root CMakeLists.txt
 
+This is the root CMake configuration file. It sets up C++20, creates a library and executable target, enables strict compiler warnings, and optionally builds tests. The `target_include_directories` with generator expressions ensures headers work during both building and after installation.
+
 ```cmake
 cmake_minimum_required(VERSION 3.21)
 project(my-project
@@ -65,6 +67,8 @@ endif()
 
 ### tests/CMakeLists.txt
 
+This secondary CMake file configures the test suite. It finds Google Test, creates a test executable, and registers tests so `ctest` can discover and run them automatically.
+
 ```cmake
 find_package(GTest REQUIRED)
 
@@ -80,6 +84,8 @@ gtest_discover_tests(unit_tests)
 ## 2. CUDA Project Setup
 
 ### CMakeLists.txt for CUDA
+
+This CMake configuration sets up a CUDA project with support for multiple GPU architectures. It enables separable compilation (needed when device code calls other device functions across files) and links against CUDA runtime and cuBLAS libraries.
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -125,6 +131,8 @@ target_link_libraries(cuda_kernels PUBLIC
 
 ### Setting Compute Capabilities
 
+These examples show different ways to target GPU architectures. A "fat binary" includes compiled code for multiple GPU generations, while `native` auto-detects your current GPU. The `-virtual` suffix includes PTX intermediate code for forward compatibility with future GPUs.
+
 ```cmake
 # Single architecture
 set(CMAKE_CUDA_ARCHITECTURES 90)  # Hopper only
@@ -145,6 +153,8 @@ set(CMAKE_CUDA_ARCHITECTURES "80-real;90-real;90-virtual")
 
 ### Mixed C++/CUDA Source Files
 
+When a `.cpp` file contains CUDA code through header includes, you must tell CMake to compile it with `nvcc` instead of the regular C++ compiler. Files with the `.cu` extension are handled automatically.
+
 ```cmake
 # When .cpp files contain CUDA code via includes
 set_source_files_properties(src/hybrid.cpp PROPERTIES LANGUAGE CUDA)
@@ -160,6 +170,8 @@ set_source_files_properties(src/hybrid.cpp PROPERTIES LANGUAGE CUDA)
 
 ### Target-Based Design (No Global Variables)
 
+Modern CMake uses target-scoped commands instead of global ones. The "GOOD" pattern keeps build settings attached to specific targets, preventing unintended side effects when projects grow larger or get included as dependencies.
+
 ```cmake
 # BAD — pollutes global scope
 include_directories(${SOME_DIR})
@@ -174,6 +186,8 @@ target_link_libraries(mylib PUBLIC somelib)
 
 ### INTERFACE Libraries (Header-Only)
 
+An INTERFACE library has no compiled source files — it only provides headers and compile requirements to anything that links against it. This is the standard CMake pattern for header-only libraries.
+
 ```cmake
 add_library(header_only INTERFACE)
 target_include_directories(header_only INTERFACE
@@ -184,6 +198,8 @@ target_compile_features(header_only INTERFACE cxx_std_20)
 ```
 
 ### Generator Expressions
+
+Generator expressions (the `$<...>` syntax) let you set different compiler flags depending on the compiler being used or the build type (Debug vs Release). This enables a single CMake file to work correctly across GCC, Clang, and MSVC.
 
 ```cmake
 target_compile_options(mylib PRIVATE
@@ -205,6 +221,8 @@ target_link_options(mylib PRIVATE
 
 ### Precompiled Headers
 
+Precompiled headers speed up compilation by pre-processing commonly used standard library headers once, then reusing the result across all source files in the target.
+
 ```cmake
 target_precompile_headers(mylib PRIVATE
     <vector>
@@ -221,6 +239,8 @@ target_precompile_headers(mylib PRIVATE
 
 ### Platform Detection
 
+This pattern detects the operating system at configure time and sets a preprocessor macro accordingly, allowing platform-specific code branches in your C++ source files.
+
 ```cmake
 if(WIN32)
     target_compile_definitions(mylib PRIVATE PLATFORM_WINDOWS)
@@ -232,6 +252,8 @@ endif()
 ```
 
 ### Configuring Builds
+
+These commands show how to configure and build a CMake project on different operating systems. Ninja is the fastest build system, while Visual Studio and Xcode generate IDE project files.
 
 ```bash
 # Linux/macOS — Ninja (fastest)
@@ -252,6 +274,8 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain-aarch64.cmake
 
 ### Toolchain File Example (cross-compile)
 
+A toolchain file tells CMake how to cross-compile — building on one platform (e.g., x86 Linux) to run on another (e.g., ARM64). It specifies the cross-compiler and where to find target-platform libraries.
+
 ```cmake
 # toolchain-aarch64.cmake
 set(CMAKE_SYSTEM_NAME Linux)
@@ -269,6 +293,8 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 ## 5. Package Management
 
 ### FetchContent (Download at Configure Time)
+
+FetchContent downloads and builds external dependencies automatically during CMake's configure step. This is the simplest way to manage C++ dependencies without a separate package manager — just specify the Git repository and tag.
 
 ```cmake
 include(FetchContent)
@@ -299,6 +325,8 @@ target_link_libraries(mylib PRIVATE fmt::fmt spdlog::spdlog)
 
 ### find_package (System-Installed)
 
+The `find_package` command locates libraries already installed on your system. Config mode (used by well-designed libraries) is preferred over Module mode. Optional packages can be handled gracefully with the `QUIET` flag.
+
 ```cmake
 # Config mode (preferred — library provides CMake config)
 find_package(Eigen3 3.4 REQUIRED CONFIG)
@@ -320,6 +348,8 @@ endif()
 ```
 
 ### Conan Integration (conanfile.txt)
+
+This Conan package manifest lists the project's dependencies and tells Conan to generate CMake-compatible files. Conan is a popular C++ package manager that handles downloading, building, and linking external libraries.
 
 ```ini
 # conanfile.txt
@@ -346,6 +376,8 @@ cmake --build --preset conan-release
 ```
 
 ### vcpkg Integration
+
+This vcpkg manifest file declares the project's dependencies in JSON format. vcpkg is Microsoft's C++ package manager that integrates tightly with CMake via a toolchain file.
 
 ```json
 // vcpkg.json (manifest mode)
@@ -376,6 +408,8 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cma
 
 ### CMake 3.28+ Module Support
 
+This CMake configuration demonstrates C++20 modules support, which replaces the traditional header/include system with faster-compiling, better-encapsulated module files (`.cppm`).
+
 ```cmake
 cmake_minimum_required(VERSION 3.28)
 project(modules-example LANGUAGES CXX)
@@ -399,6 +433,8 @@ target_link_libraries(app PRIVATE math_module)
 
 ### Module Source File (math.cppm)
 
+This module source file exports a `math` namespace with functions that other files can import. Unlike headers, modules are compiled once and don't suffer from multiple-inclusion or macro leakage problems.
+
 ```cpp
 // src/math.cppm
 export module math;
@@ -412,6 +448,8 @@ export namespace math {
 ```
 
 ### Consumer (main.cpp)
+
+This consumer file uses `import math` to access the module's exported functions. No `#include` is needed — the compiler knows the module's interface from the compiled module file.
 
 ```cpp
 // src/main.cpp
@@ -428,6 +466,8 @@ int main() {
 ## 7. CI/CD: GitHub Actions for C++/CUDA
 
 ### Complete Workflow (.github/workflows/ci.yml)
+
+This GitHub Actions workflow automates CI/CD for C++/CUDA projects. It builds with multiple compilers and configurations in parallel, runs tests, checks for memory errors with sanitizers, and performs static analysis with clang-tidy.
 
 ```yaml
 name: C++/CUDA CI
@@ -521,6 +561,8 @@ jobs:
 
 ### Full Development Dockerfile
 
+This multi-stage Dockerfile creates a complete CUDA development environment. The base stage installs all development tools, the builder stage compiles the project, and the runtime stage creates a minimal production image containing only the compiled binary.
+
 ```dockerfile
 # syntax=docker/dockerfile:1
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS base
@@ -574,6 +616,8 @@ ENTRYPOINT ["/usr/local/bin/my-app"]
 
 ### Docker Compose for Development
 
+This Docker Compose file sets up a persistent development container with GPU access. The `deploy` section passes all NVIDIA GPUs into the container, and the volume mount allows editing code on the host while building inside the container.
+
 ```yaml
 # docker-compose.yml
 version: "3.8"
@@ -597,6 +641,8 @@ services:
 
 ### Usage
 
+These commands start the development container, open a shell inside it, and run a typical CMake build-and-test workflow.
+
 ```bash
 # Build and run
 docker compose up -d dev
@@ -619,6 +665,9 @@ CMake Error: No CMAKE_CUDA_COMPILER could be found.
 ```
 
 **Fix:**
+
+To fix this error, ensure the CUDA toolkit's `bin` directory is in your `PATH` so CMake can find `nvcc`. You can also specify the compiler path explicitly.
+
 ```bash
 # Ensure CUDA is in PATH
 export PATH=/usr/local/cuda/bin:$PATH
@@ -635,6 +684,9 @@ nvcc fatal: The version ('13.x') of the host compiler ('gcc') is not supported
 ```
 
 **Fix:**
+
+If your GCC version is too new for `nvcc`, specify an older, supported host compiler version. Clang is also a valid alternative.
+
 ```bash
 # Use a supported GCC version
 cmake -B build -DCMAKE_CUDA_HOST_COMPILER=g++-12
@@ -649,6 +701,9 @@ undefined reference to __cudaRegisterLinkedBinary
 ```
 
 **Fix:**
+
+Enable separable compilation and device symbol resolution on the target. These properties are required when CUDA device code in one file calls device functions defined in another file.
+
 ```cmake
 set_target_properties(my_target PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
@@ -663,6 +718,9 @@ undefined symbol: _ZN3foo3barEv (mangled name)
 ```
 
 **Fix:**
+
+Ensure all compiled code uses the same C++ ABI (Application Binary Interface). Mixing compilers or ABI settings causes linker errors with mangled symbol names.
+
 ```cmake
 # Ensure consistent compiler and standard library
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
@@ -670,6 +728,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
 ```
 
 ### Issue: CMake Not Finding Installed Packages
+
+When CMake can't find an installed library, add its installation path to `CMAKE_PREFIX_PATH` or set the package-specific `_DIR` variable. Enable debug mode to see exactly where CMake is searching.
 
 ```cmake
 # Set search paths
@@ -684,6 +744,8 @@ cmake -B build -DCMAKE_FIND_DEBUG_MODE=ON
 
 ### Issue: CUDA + C++ Standard Mismatch
 
+Keep the C++ and CUDA language standard settings in sync. Mismatched standards can cause compilation errors when CUDA kernels use modern C++ features.
+
 ```cmake
 # Ensure both compilers use the same standard
 set(CMAKE_CXX_STANDARD 20)
@@ -691,6 +753,8 @@ set(CMAKE_CUDA_STANDARD 20)  # CUDA 12+ supports C++20
 ```
 
 ### Issue: Slow Builds
+
+These techniques speed up C++ and CUDA builds: Ninja is faster than Make, `ccache` avoids recompiling unchanged files, unity builds combine multiple source files, and precompiled headers skip redundant parsing.
 
 ```cmake
 # Use Ninja (faster than Make)
@@ -713,6 +777,8 @@ target_precompile_headers(mylib PRIVATE <vector> <string> <memory>)
 
 ### Issue: link-time optimization (LTO)
 
+Link-Time Optimization (LTO) lets the compiler optimize across translation units for better performance. The `CheckIPOSupported` module verifies your toolchain supports it before enabling it.
+
 ```cmake
 # Enable LTO for Release
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
@@ -730,6 +796,8 @@ endif()
 ---
 
 ## 10. CMake Presets (CMakePresets.json)
+
+CMake Presets define reusable build configurations in a JSON file. This eliminates the need to remember long command-line flags — you just use `cmake --preset release` instead of typing all the options manually.
 
 ```json
 {

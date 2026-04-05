@@ -22,6 +22,9 @@
 ### Vector Add Comparison
 
 **CUDA:**
+
+The CUDA version of vector addition is concise: the `__global__` kernel computes one element per thread using a standard index formula, and the launch syntax `<<<blocks, threads>>>` specifies the parallel execution grid.
+
 ```cuda
 __global__ void vecAdd(const float* A, const float* B, float* C, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -33,6 +36,9 @@ vecAdd<<<(N+255)/256, 256>>>(d_A, d_B, d_C, N);
 ```
 
 **OpenCL:**
+
+The OpenCL version of the same vector addition requires significantly more boilerplate. You must manually create a platform, device, context, command queue, compile the kernel at runtime, create buffers, set arguments, and manage the execution — all of which CUDA handles implicitly.
+
 ```c
 // Kernel (string or .cl file)
 const char* kernelSrc = R"(
@@ -87,6 +93,8 @@ clEnqueueReadBuffer(queue, d_C, CL_TRUE, 0, N*sizeof(float), h_C, 0, NULL, NULL)
 | **Performance** | Native                        | Native on AMD, ~same on NVIDIA   |
 
 ### hipify Conversion Tool
+
+The `hipify` tool automatically converts CUDA source code to HIP by replacing CUDA API calls with their HIP equivalents (e.g., `cudaMalloc` → `hipMalloc`). The conversion handles about 95% of typical CUDA code.
 
 ```bash
 # Automated conversion
@@ -215,6 +223,9 @@ Use preprocessor directives to write code that compiles on both CUDA and HIP. Al
 ### Vector Add Comparison
 
 **CUDA:**
+
+This CUDA vector addition shows the standard pattern: allocate device memory, copy data to the GPU, run the kernel, copy results back, and free memory. The HIP version below is nearly identical — only the function name prefixes change.
+
 ```cuda
 __global__ void vecAdd(const float* A, const float* B, float* C, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -430,6 +441,9 @@ cmdBuffer.waitUntilCompleted()
 ### Vector Add Comparison
 
 **CUDA:**
+
+This CUDA vector addition kernel demonstrates the minimal GPU pattern: each thread computes its global index, checks bounds, and processes one element. The Triton version below achieves the same result using a block-level programming model instead of individual threads.
+
 ```cuda
 __global__ void vecAdd(const float* A, const float* B, float* C, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;

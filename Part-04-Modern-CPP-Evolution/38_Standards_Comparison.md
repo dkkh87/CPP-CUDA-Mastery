@@ -137,6 +137,8 @@ gantt
 
 ### Example 1: Resource Management (C++03 → C++17)
 
+This is the old C++03 approach to resource management using raw `new`/`delete` and manual `fclose` calls. It is fragile because every early return or exception path requires an explicit `delete`, making memory leaks easy to introduce and hard to spot in larger functions.
+
 ```cpp
 // BEFORE — C++03: manual memory, leak-prone
 class FileHandle {
@@ -152,6 +154,8 @@ void process() {
     delete fh;  // easy to leak on early return
 }
 ```
+
+The modern C++17 version replaces raw pointers with `std::unique_ptr` and a custom deleter for automatic cleanup via RAII. The factory function returns `std::optional<FileHandle>`, eliminating the need for manual `delete` — resources are freed automatically when they go out of scope, making leaks impossible regardless of control flow.
 
 ```cpp
 // AFTER — C++17: RAII, optional, no leaks
@@ -179,11 +183,15 @@ void process() {
 
 ### Example 2: Generic Algorithm (C++11 SFINAE → C++20 Concepts)
 
+The old C++11 approach uses SFINAE (`std::enable_if_t`) to constrain templates. While functional, SFINAE produces notoriously unreadable error messages and clutters the function signature with a dummy template parameter that serves no purpose except type checking.
+
 ```cpp
 // BEFORE — C++11 SFINAE
 template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
 T double_value(T x) { return x * 2; }
 ```
+
+C++20 Concepts replace the SFINAE boilerplate with a clean, readable constraint (`std::integral`) placed directly on the template parameter. Error messages now point to the unsatisfied concept by name, making debugging dramatically easier.
 
 ```cpp
 // AFTER — C++20 Concepts
@@ -194,6 +202,8 @@ T double_value(T x) { return x * 2; }
 
 ### Example 3: Error Handling (C++11 → C++23)
 
+The old C++11 pattern uses output parameters and a `bool` return value to signal success or failure. This approach is error-prone because callers can easily forget to check the return value, and the function signature doesn't clearly communicate that `result` and `err` are outputs.
+
 ```cpp
 // BEFORE — output parameters
 bool safe_divide(double a, double b, double& result, std::string& err) {
@@ -202,6 +212,8 @@ bool safe_divide(double a, double b, double& result, std::string& err) {
     return true;
 }
 ```
+
+C++23's `std::expected<T, E>` replaces the awkward output-parameter pattern with a single return type that carries either the success value or an error. This makes the function signature self-documenting and enables monadic chaining with `.transform()` — no need to check booleans or inspect separate error variables.
 
 ```cpp
 // AFTER — std::expected (C++23)
@@ -216,11 +228,15 @@ std::expected<double, std::string> safe_divide(double a, double b) {
 
 ### Example 4: String Formatting (C++11 → C++23)
 
+The old approach uses C's `snprintf` with a fixed-size buffer, format specifiers (`%d`, `%.2f`, `%s`), and no type safety — passing the wrong type silently produces garbage output or undefined behavior.
+
 ```cpp
 // BEFORE
 char buf[256];
 snprintf(buf, sizeof(buf), "ID=%d Score=%.2f Name=%s", id, score, name);
 ```
+
+C++23's `std::format` and `std::println` provide type-safe, Python-style formatting with `{}` placeholders. Unlike `snprintf`, they catch type mismatches at compile time, handle `std::string` natively, and eliminate buffer-overflow risks.
 
 ```cpp
 // AFTER — std::format / std::print (C++23)
@@ -240,6 +256,9 @@ std::println("ID={} Score={:.2f} Name={}", id, score, name);
 3. Enable `-Wall -Wextra -Wpedantic`.
 
 ### Phase 2: Automated Modernization (Week 3–4)
+
+This command runs clang-tidy with all `modernize-*` checks enabled and the `-fix` flag to automatically rewrite source files in place. It handles bulk conversions like `NULL` → `nullptr`, adding `override`, converting loops to range-for, and replacing raw `new` with `make_unique` — covering 60–70% of a typical migration.
+
 ```bash
 clang-tidy -checks='modernize-*' -fix src/*.cpp -- -std=c++20
 ```
@@ -297,6 +316,9 @@ Key checks: `modernize-use-auto`, `modernize-use-nullptr`, `modernize-use-overri
 
 ### 🟢 Exercise 1 — Modernize a Loop
 Rewrite using C++17 (range-for, structured bindings):
+
+This is the old C++03-style loop using an explicit `const_iterator` type, manual `begin()`/`end()` calls, and `->first`/`->second` to access map entries. Your task is to replace it with C++17 structured bindings and a range-based for loop.
+
 ```cpp
 std::map<std::string, int> scores;
 for (std::map<std::string, int>::const_iterator it = scores.begin();
@@ -308,6 +330,9 @@ for (std::map<std::string, int>::const_iterator it = scores.begin();
 
 ### 🟡 Exercise 2 — Replace SFINAE with Concepts
 Convert to C++20 Concepts:
+
+This code uses the C++11 SFINAE pattern with `std::enable_if_t` to restrict the template to integral types. Your task is to replace this verbose constraint with a clean C++20 `std::integral` concept.
+
 ```cpp
 template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
 T double_value(T x) { return x * 2; }
@@ -315,6 +340,9 @@ T double_value(T x) { return x * 2; }
 
 ### 🟡 Exercise 3 — Migrate Error Handling
 Refactor to return `std::expected<double, std::string>` (C++23):
+
+This function uses the old output-parameter pattern: a `bool` return for success/failure with `result` and `error` passed by reference. Your task is to refactor it to return `std::expected`, eliminating the output parameters entirely.
+
 ```cpp
 bool safe_divide(double a, double b, double& result, std::string& error) {
     if (b == 0.0) { error = "division by zero"; return false; }
@@ -330,6 +358,9 @@ Write a C++20 `SortedBuffer<T, N>` that uses `std::array<T, N>` internally, cons
 ## Solutions
 
 ### Solution 1
+
+The modernized loop uses C++17 structured bindings (`[name, score]`) to unpack each map entry directly, and a range-based `for` loop to eliminate the verbose iterator boilerplate. This is shorter, more readable, and less error-prone than the explicit iterator version.
+
 ```cpp
 for (const auto& [name, score] : scores) {
     if (score > 90)
@@ -338,6 +369,9 @@ for (const auto& [name, score] : scores) {
 ```
 
 ### Solution 2
+
+The C++20 version replaces the `std::enable_if_t` SFINAE hack with `std::integral` as a direct template constraint. The result is identical behavior with a cleaner signature and far better compiler error messages when the constraint is not satisfied.
+
 ```cpp
 #include <concepts>
 template <std::integral T>
@@ -345,6 +379,9 @@ T double_value(T x) { return x * 2; }
 ```
 
 ### Solution 3
+
+The C++23 refactored version returns `std::expected<double, std::string>`, which carries either the computed value or an error string. `std::unexpected` wraps the error case, and callers can chain operations with `.transform()` — no output parameters or boolean checks needed.
+
 ```cpp
 #include <expected>
 #include <string>
@@ -355,6 +392,9 @@ std::expected<double, std::string> safe_divide(double a, double b) {
 ```
 
 ### Solution 4
+
+This `SortedBuffer` uses a C++20 `std::totally_ordered` concept to constrain `T`, ensuring only types with valid comparison operators can be stored. Internally it maintains sorted order using `std::ranges::upper_bound` for insertion and `std::ranges::binary_search` for lookup — combining concepts, ranges, and fixed-capacity storage in one clean abstraction.
+
 ```cpp
 #include <array>
 #include <algorithm>

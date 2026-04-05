@@ -39,6 +39,8 @@
 
 ### Launch Configuration
 
+This shows the complete kernel launch pattern: define a `__global__` kernel function, calculate the grid size to cover all elements (rounding up), and launch with the `<<<gridSize, blockSize>>>` syntax. The `if (idx < N)` guard prevents out-of-bounds access when N isn't a multiple of the block size.
+
 ```cuda
 __global__ void myKernel(float* data, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
