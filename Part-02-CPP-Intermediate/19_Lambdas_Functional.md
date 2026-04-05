@@ -81,6 +81,8 @@ flowchart TD
 
 ### 3.2 Capture Examples
 
+This program demonstrates all six capture modes available in C++ lambdas: capturing nothing, capturing all by copy (`[=]`), capturing all by reference (`[&]`), mixed capture, init-capture with `std::move` (C++14), and init-capture with a transformed expression. Each example shows how the lambda interacts with the outer scope's variables.
+
 ```cpp
 // capture_demo.cpp — compile: g++ -std=c++20 -Wall -o capture_demo capture_demo.cpp
 #include <iostream>
@@ -126,6 +128,8 @@ int main() {
 ```
 
 ### 3.3 `[this]` vs `[*this]` (C++17)
+
+This example contrasts `[this]` (capturing the pointer to the enclosing object) with `[*this]` (capturing a copy of the entire object). The `lazy_read_copy()` method returns a lambda that safely outlives the `Sensor` object because it holds its own copy, while `lazy_read_ptr()` would dangle if the object were destroyed before the lambda runs.
 
 ```cpp
 // this_capture.cpp — compile: g++ -std=c++20 -Wall -o this_capture this_capture.cpp
@@ -193,6 +197,8 @@ int main() {
 
 ### 5.1 Generic Lambda — `auto` Parameters
 
+A generic lambda uses `auto` parameters, which the compiler treats as an implicit template. This means a single lambda definition can accept arguments of any type — `int`, `double`, `std::string` — without writing separate overloads.
+
 ```cpp
 // generic_lambda.cpp — compile: g++ -std=c++20 -Wall -o generic_lambda generic_lambda.cpp
 #include <iostream>
@@ -212,7 +218,7 @@ int main() {
 
 ### 5.2 Template Lambda (C++20)
 
-When you need to constrain or reuse the template parameter:
+When you need to constrain or reuse the template parameter, C++20 template lambdas give you an explicit template parameter list. This example shows both an unconstrained template lambda that sums any `vector<T>` and a constrained one that only accepts `std::integral` types via concepts.
 
 ```cpp
 // template_lambda.cpp — compile: g++ -std=c++20 -Wall -o template_lambda template_lambda.cpp
@@ -287,7 +293,7 @@ int main() {
 ## 7 · `std::function` — Type-Erased Callable Wrapper
 
 `std::function<R(Args...)>` can hold *any* callable with that signature:
-function pointer, functor, lambda, or `std::bind` result.
+function pointer, functor, lambda, or `std::bind` result. This example builds a registry of named arithmetic operations, each stored as a `std::function<double(double, double)>`, and looks them up by name at runtime — demonstrating how `std::function` enables runtime polymorphism for callables.
 
 ```cpp
 // std_function.cpp — compile: g++ -std=c++20 -Wall -o std_function std_function.cpp
@@ -341,6 +347,8 @@ int main() {
 
 ### 8.1 Function Composition
 
+This example implements mathematical function composition: `compose(f, g)` returns a new lambda that computes `f(g(x))`. Three simple functions are composed into a pipeline that adds three, doubles, and converts to a string — all without intermediate variables.
+
 ```cpp
 // compose.cpp — compile: g++ -std=c++20 -Wall -o compose compose.cpp
 #include <iostream>
@@ -366,6 +374,8 @@ int main() {
 ```
 
 ### 8.2 Pipeline Builder (Fluent Chaining)
+
+This example builds reusable higher-order functions — `filter`, `transform`, and `reduce` — that each return a lambda operating on a vector. These building blocks are chained together to filter even numbers, square them, and sum the results, demonstrating how lambdas enable functional-style data processing without any library support.
 
 ```cpp
 // pipeline.cpp — compile: g++ -std=c++20 -Wall -o pipeline pipeline.cpp
@@ -414,6 +424,8 @@ int main() {
 ---
 
 ## 9 · Functional Patterns with C++20 Ranges
+
+C++20 Ranges provide a built-in, lazy alternative to the manual pipeline approach above. This example uses `views::filter` and `views::transform` with the pipe operator (`|`) to process data without intermediate allocations, and demonstrates `views::iota` for generating an infinite sequence of squares.
 
 ```cpp
 // ranges_functional.cpp — compile: g++ -std=c++20 -Wall -o ranges_functional ranges_functional.cpp
@@ -499,6 +511,8 @@ the sum of ASCII values of uppercase letters in a string.
 
 ### Solution 1 — Counter Factory
 
+This solution uses an init-capture (`n = start`) combined with `mutable` to create a lambda that maintains its own internal counter. Each call to the returned lambda increments and returns the next value, demonstrating how closures can encapsulate mutable state.
+
 ```cpp
 // sol1_counter.cpp — compile: g++ -std=c++20 -Wall -o sol1 sol1_counter.cpp
 #include <iostream>
@@ -516,6 +530,8 @@ int main() {
 ```
 
 ### Solution 2 — Memoize
+
+This solution wraps any single-argument function in a lambda that caches results in an `unordered_map`. The `mutable` keyword is required because the cache must be modified on each call. The Fibonacci example uses `std::function` for self-referencing recursion, allowing the memoized wrapper to intercept recursive calls.
 
 ```cpp
 // sol2_memoize.cpp — compile: g++ -std=c++20 -Wall -o sol2 sol2_memoize.cpp
@@ -552,6 +568,8 @@ int main() {
 ```
 
 ### Solution 3 — Retry with Backoff
+
+This solution implements a generic retry wrapper using templates and exception handling. It calls the given function, catches failures, waits with exponentially increasing delays, and either returns the successful result or rethrows after exhausting all attempts. The test uses a deliberately unreliable lambda that succeeds only on the third call.
 
 ```cpp
 // sol3_retry.cpp — compile: g++ -std=c++20 -Wall -o sol3 sol3_retry.cpp
@@ -594,6 +612,8 @@ int main() {
 ```
 
 ### Solution 4 — Mini Ranges Pipeline
+
+This solution implements `Filter`, `Map`, and `Reduce` as higher-order function templates that each return a lambda operating on vectors. They are chained together to extract uppercase letters from a string, convert them to ASCII values, and sum the results — all without using `<ranges>`.
 
 ```cpp
 // sol4_pipeline.cpp — compile: g++ -std=c++20 -Wall -o sol4 sol4_pipeline.cpp

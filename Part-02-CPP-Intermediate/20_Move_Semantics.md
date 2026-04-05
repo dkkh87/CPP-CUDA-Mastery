@@ -72,7 +72,7 @@ when the source is an rvalue (temporary or explicitly `std::move`'d).
 
 ## 3. Rvalue References (`&&`)
 
-An rvalue reference binds to temporaries and `std::move`'d objects.
+An rvalue reference binds to temporaries and `std::move`'d objects. This program demonstrates overload resolution between lvalue and rvalue reference parameters — the compiler selects the correct `process()` overload based on whether the argument is a named variable (lvalue), a temporary (prvalue), or explicitly moved (xvalue via `std::move`).
 
 ```cpp
 // rvalue_refs.cpp — compile: g++ -std=c++20 -Wall -o rvalue_refs rvalue_refs.cpp
@@ -101,6 +101,8 @@ int main() {
 ---
 
 ## 4. Move Constructor & Move Assignment Operator
+
+This `Buffer` class demonstrates the complete Rule of Five: constructor, destructor, copy constructor, copy assignment, move constructor, and move assignment. The move operations transfer the heap-allocated array by stealing the pointer and size from the source, then nullifying the source — achieving O(1) transfer instead of O(N) copy. The `main` function exercises each path and prints which operation was called.
 
 ```cpp
 // buffer.cpp — compile: g++ -std=c++20 -Wall -O2 -o buffer buffer.cpp
@@ -223,6 +225,8 @@ via overload resolution.
 
 ### Common Pitfall
 
+Moving a `const` object does not actually move — `std::move` produces a `const std::string&&`, which cannot bind to the move constructor's `std::string&&` parameter, so the compiler silently selects the copy constructor instead.
+
 ```cpp
 const std::string s = "hello";
 std::string t = std::move(s);   // calls COPY ctor, not move!
@@ -254,7 +258,7 @@ std::string t = std::move(s);   // calls COPY ctor, not move!
 ```
 
 **Best practice:** Prefer the Rule of Zero.  Let `std::unique_ptr`,
-`std::vector`, and `std::string` manage resources.
+`std::vector`, and `std::string` manage resources. This `Employee` struct owns RAII types that each manage their own cleanup, so the compiler generates correct move operations automatically and no custom destructor or copy/move operators are needed.
 
 ```cpp
 // rule_of_zero.cpp — compile: g++ -std=c++20 -Wall -o rule_of_zero rule_of_zero.cpp
@@ -291,6 +295,8 @@ caller's memory, bypassing both copy and move constructors.
 | **RVO** (Return Value Optimisation) | Returning a prvalue (unnamed temporary) | ✅ Yes — mandatory |
 | **NRVO** (Named RVO) | Returning a named local variable | ❌ No — permitted, not required |
 
+This program shows RVO and NRVO in action by defining a `Widget` class that prints a message for every constructor call. Compile with `-fno-elide-constructors` to see the moves that the compiler would normally eliminate, then compile without that flag to confirm that elision removes them entirely.
+
 ```cpp
 // elision.cpp — compile: g++ -std=c++20 -Wall -fno-elide-constructors -o elision elision.cpp
 // (Use -fno-elide-constructors to SEE moves that are normally elided)
@@ -326,7 +332,7 @@ constructor call — no copy, no move.
 
 A "wrapper" function that accepts `T&&` (a forwarding/universal reference)
 needs to pass the argument to another function **preserving its original value
-category** — lvalue stays lvalue, rvalue stays rvalue.
+category** — lvalue stays lvalue, rvalue stays rvalue. This program demonstrates the problem: `wrapper_bad` always calls the `const&` overload because a named parameter is an lvalue, while `wrapper_good` uses `std::forward<T>` to preserve the original value category and correctly dispatch rvalues to the `&&` overload.
 
 ```cpp
 // forwarding.cpp — compile: g++ -std=c++20 -Wall -o forwarding forwarding.cpp
@@ -389,6 +395,8 @@ And `emplace_back` perfectly-forwards arguments directly to the constructor:
 template <class... Args>
 reference emplace_back(Args&&... args);   // constructs in-place
 ```
+
+This example shows the three ways to add strings to a `std::vector`: `push_back` with an lvalue (copies), `push_back` with `std::move` (moves, leaving the source empty), and `emplace_back` with constructor arguments (constructs the string directly in the vector's memory without any copy or move).
 
 ```cpp
 // stl_moves.cpp — compile: g++ -std=c++20 -Wall -O2 -o stl_moves stl_moves.cpp
@@ -527,6 +535,8 @@ void sink(std::string&& s) {
 
 ### S3: `UniqueResource`
 
+This class wraps a raw `FILE*` handle following the Rule of Five: the constructor opens the file, the destructor closes it, copy operations are explicitly deleted to enforce unique ownership, and move operations transfer the handle by pointer swap. All move operations are marked `noexcept`.
+
 ```cpp
 // unique_resource.cpp — compile: g++ -std=c++20 -Wall -o unique_resource unique_resource.cpp
 #include <cstdio>
@@ -576,6 +586,8 @@ int main() {
 
 ### S4: Perfect-Forwarding Factory
 
+This factory function uses a variadic template with perfect forwarding (`Args&&...` + `std::forward`) to pass any number of arguments to `T`'s constructor without unnecessary copies or moves. This is the same pattern used internally by `std::make_unique` and `std::make_shared`.
+
 ```cpp
 // factory.cpp — compile: g++ -std=c++20 -Wall -o factory factory.cpp
 #include <iostream>
@@ -598,6 +610,8 @@ int main() {
 ```
 
 ### S5: Benchmark (Sketch)
+
+This benchmark measures the performance difference between three approaches for inserting one million 200-character strings into a vector: copying each string, moving each string (O(1) pointer swap), and emplacing (constructing directly in-place). The results clearly show that moves avoid per-element heap allocation and are fastest.
 
 ```cpp
 // bench_moves.cpp — compile: g++ -std=c++20 -O2 -o bench_moves bench_moves.cpp
@@ -874,6 +888,8 @@ without checking `empty()` first is undefined behaviour.
 
 **Answer (Rule of Five):**
 
+This `Blob` class manually manages a dynamic `char` array, requiring all five special member functions: constructor, destructor, copy constructor (deep copy), copy assignment (copy-and-swap idiom), move constructor (pointer steal), and move assignment (delete-and-steal).
+
 ```cpp
 class Blob {
     std::size_t n_;
@@ -897,6 +913,8 @@ public:
 ```
 
 **Refactored (Rule of Zero):**
+
+By replacing the raw `char*` with a `std::vector<char>`, all five special member functions become unnecessary — the compiler generates correct, exception-safe copy and move operations automatically.
 
 ```cpp
 class Blob {
