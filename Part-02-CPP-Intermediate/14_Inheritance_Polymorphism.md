@@ -30,6 +30,8 @@ Key concepts: **access control** (`public`/`protected`/`private` inheritance), *
 
 ### 1 — Single Inheritance with Access Control
 
+This example shows a `Dog` class inheriting from `Animal` using public inheritance. The `Dog` can access `Animal`'s `protected` member `age_` and public method `name()`, but cannot touch the `private` member `name_` directly. The `using Animal::Animal` statement inherits the base constructor so `Dog` doesn't need to rewrite it.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -61,6 +63,8 @@ int main() {
 ```
 
 ### 2 — Virtual Functions: Shape Hierarchy
+
+This classic hierarchy declares `Shape` as an abstract base class with pure virtual functions (`= 0`) for `area()`, `perimeter()`, and `draw()`. Each derived class (`Circle`, `Rectangle`, `Square`) provides its own implementation via `override`. A `vector<unique_ptr<Shape>>` stores mixed shapes and calls `print_info()` on each — the correct derived method executes at runtime through virtual dispatch.
 
 ```cpp
 #include <cmath>
@@ -133,6 +137,8 @@ call [rax + OFFSET_OF_area]    ; indirect call through vtable
 
 ### 4 — `override` and `final`
 
+The `override` keyword tells the compiler to verify that a method actually overrides a base virtual function — catching signature typos at compile time. The `final` keyword on a method prevents further overriding, and on a class prevents any further inheritance. Both are safety nets that cost nothing at runtime.
+
 ```cpp
 class Base {
 public:
@@ -153,6 +159,8 @@ class Leaf final : public Derived {};     // no class can inherit from Leaf
 ```
 
 ### 5 — Pure Virtual Functions & Interface Pattern
+
+These two abstract classes (`ISerializable`, `IDrawable`) act as interfaces — they contain only pure virtual functions and no data. The `Widget` class inherits from both, implementing all required methods. This pattern lets you write code that depends on capabilities (serialization, drawing) rather than concrete types.
 
 ```cpp
 class ISerializable {
@@ -178,6 +186,8 @@ public:
 
 ### 6 — Multiple Inheritance & the Diamond Problem
 
+When `AllInOne` inherits from both `Printer` and `Scanner`, and each of those inherits from `Device`, the object ends up with **two separate copies** of `Device`. Accessing `aio.id` is ambiguous — you must qualify which parent's copy you mean. This duplication is the "diamond problem."
+
 ```cpp
 class Device { public: int id = 0; };
 class Printer : public Device { public: void print() { std::cout << id; } };
@@ -193,6 +203,8 @@ int main() {
 ```
 
 ### 7 — Virtual Inheritance Solves the Diamond
+
+Adding `virtual` to the inheritance of `Device` ensures only **one shared copy** of the `Device` base exists in `AllInOne`. The most-derived class (`AllInOne`) must initialize the virtual base directly. Now `aio.id` is unambiguous because there's only a single `Device` sub-object.
 
 ```cpp
 class Device { public: int id = 0; };
@@ -210,6 +222,8 @@ int main() {
 ```
 
 ### 8 — Object Slicing
+
+When a `Derived` object is passed **by value** to a function expecting `Base`, the derived-specific data (`extra_`) is sliced off and polymorphism is lost — `who()` always prints "Base". Passing by reference (`const Base&`) preserves the full object and enables correct virtual dispatch.
 
 ```cpp
 class Base {
@@ -234,6 +248,8 @@ int main() {
 ```
 
 ### 9 — Dynamic Dispatch Cost Analysis
+
+This benchmark measures the overhead of virtual function calls versus direct (non-virtual) calls by running 100 million iterations of each. The virtual path goes through a vtable indirection, while the direct path can be inlined by the compiler. The timing difference shows the real-world cost of dynamic dispatch.
 
 ```cpp
 #include <chrono>
@@ -342,6 +358,8 @@ Abstract `Expr` with `virtual double eval() const = 0`. Derive `Literal(double)`
 
 <details><summary>🟢 Easy</summary>
 
+This solution defines an abstract `Animal` base class with a pure virtual `speak()` method. `Cat` and `Dog` each override it with their own sound, and a `vector<unique_ptr<Animal>>` demonstrates polymorphic dispatch — each animal speaks correctly through the base pointer.
+
 ```cpp
 #include <iostream>
 #include <memory>
@@ -371,6 +389,8 @@ int main() {
 </details>
 
 <details><summary>🟡 Medium</summary>
+
+This expression tree uses an abstract `Expr` class with `Literal`, `Add`, and `Mul` derived classes. Each node evaluates recursively via `eval()`, and `unique_ptr` manages ownership. The tree `(3 + 4) * 2` evaluates to 14 through polymorphic dispatch.
 
 ```cpp
 #include <iostream>
@@ -412,6 +432,8 @@ int main() {
 </details>
 
 <details><summary>🔴 Hard</summary>
+
+This plugin system defines an abstract `Plugin` interface and a `PluginManager` that stores plugins via `unique_ptr`. Concrete plugins (`Logger`, `Compressor`) are registered at runtime and executed through the base interface — demonstrating the open/closed principle where new plugins can be added without modifying existing code.
 
 ```cpp
 #include <algorithm>

@@ -196,6 +196,8 @@ AMP combines three techniques to train safely in mixed precision:
 
 ### FP16 vs BF16 for Training
 
+This kernel demonstrates the critical range and precision differences between FP16 and BF16 by converting small gradient values and large activation values into both formats. It shows how FP16 can underflow (small gradients become zero) and overflow (large activations become infinity), while BF16 avoids both problems because it shares FP32's 8-bit exponent range. This is the key reason why BF16 is preferred for training large models.
+
 ```cpp
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
@@ -259,6 +261,8 @@ int main() {
 ```
 
 ### Loss Scaling Implementation
+
+This code implements the two-phase loss scaling technique essential for FP16 training. The first kernel multiplies gradients by a large scale factor during the backward pass to prevent tiny gradient values from underflowing to zero in FP16. The second kernel converts the scaled FP16 gradients back to FP32 and divides by the scale factor, while checking for infinity or NaN to detect when the scale was too large. This demonstrates why loss scaling is necessary for FP16 but not for BF16 training.
 
 ```cpp
 #include <cuda_runtime.h>
@@ -507,6 +511,8 @@ void runCutlassGemm(int M, int N, int K,
 
 ### Solution 1 (🟢)
 
+This kernel performs an FP32→FP16→FP32 round trip conversion to measure how much precision is lost when values are stored in half precision. By testing three value ranges ([0,1], [0,100], [0,100000]), it reveals that FP16 error grows with magnitude — and values above 65504 overflow entirely. This demonstrates FP16's limited dynamic range in practice.
+
 ```cpp
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
@@ -558,6 +564,8 @@ int main() {
 ```
 
 ### Solution 4 (🟡)
+
+This program simulates dynamic loss scaling over 10,000 training iterations. The scale factor starts at 65536 and adapts automatically: it halves whenever a gradient overflow is detected, and doubles after 2000 consecutive stable steps. This is the exact strategy used by frameworks like PyTorch AMP to keep FP16 gradients in a representable range throughout training.
 
 ```cpp
 #include <cstdio>

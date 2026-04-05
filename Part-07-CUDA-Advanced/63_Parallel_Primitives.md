@@ -32,6 +32,8 @@ Optimized implementations run **20–50× faster** than naive approaches.
 
 ### Level 0: Naive → Level 4: Template Unrolling (Progression Summary)
 
+This code shows five progressive optimizations of GPU parallel reduction, from naive to expert. Level 0 uses modular arithmetic causing warp divergence. Level 1 fixes this with contiguous active threads. Level 2 adds two elements per thread during load, halving the number of blocks. Level 3 unrolls the last warp (32 threads don't need `__syncthreads`). Level 4 uses C++ templates so the compiler removes all branches at compile time. Each level builds on the previous one, demonstrating the classic CUDA optimization journey.
+
 ```cpp
 #include <cuda_runtime.h>
 #include <cstdio>
@@ -126,6 +128,8 @@ __global__ void reduceL4(const float* input, float* output, int n) {
 
 ### Level 5: Warp Shuffle Reduction (No Shared Memory!)
 
+This kernel eliminates shared memory entirely for intra-warp communication by using `__shfl_down_sync`, which transfers values directly between thread registers within a warp. Each thread starts with one element, and warp shuffle instructions halve the active participants at each step — this is faster because register-to-register transfers avoid shared memory latency and bank conflicts. A small shared memory array collects per-warp results, then the first warp reduces those final sums.
+
 ```cpp
 // LEVEL 5: Pure warp shuffle — eliminates shared memory entirely for warp-level reduction
 __device__ float warpShuffleReduce(float val) {
@@ -211,6 +215,8 @@ Exclusive:  [0, 3, 4, 8, 9, 14, 23, 25]   (excludes current element)
 ```
 
 ### Blelloch Algorithm: Up-Sweep + Down-Sweep
+
+This kernel implements the Blelloch work-efficient exclusive prefix scan, a fundamental GPU primitive. The up-sweep phase builds a reduction tree bottom-up, computing partial sums at each level. The down-sweep phase then distributes these partial sums top-down to produce the final exclusive scan output. The algorithm uses O(n) total work (same as a sequential scan), making it work-efficient — unlike the simpler Hillis-Steele approach which does O(n log n) work.
 
 ```cpp
 #include <cuda_runtime.h>
@@ -377,6 +383,8 @@ int main() {
 
 ### CUB: Device-Level Primitives
 
+This code demonstrates CUB's two-phase API pattern for device-wide reduction and inclusive scan. You first call the function with a null temp pointer to query how much temporary storage is needed, then allocate that storage and call again to execute. This design gives you full control over memory allocation, enabling memory pool reuse across multiple calls — which is critical for performance in production GPU pipelines.
+
 ```cpp
 #include <cub/cub.cuh>
 #include <cuda_runtime.h>
@@ -402,6 +410,8 @@ void cubExamples(const float* d_in, float* d_out, int n) {
 ```
 
 ### Thrust: STL-like GPU Algorithms
+
+This code demonstrates Thrust's high-level STL-like interface for GPU operations including reduction (`thrust::reduce`), inclusive scan (`thrust::inclusive_scan`), sorting (`thrust::sort`), and stream compaction (`thrust::copy_if`). Thrust handles all memory management and kernel launches automatically, making it ideal for rapid prototyping. The trade-off is less control over memory allocation and CUDA streams compared to CUB.
 
 ```cpp
 #include <thrust/device_vector.h>
@@ -561,6 +571,8 @@ flowchart LR
 
 ### Solution 1 (🟢)
 
+This benchmarking harness times both the naive Level 0 and optimized Level 5 (warp shuffle) reductions on 16 million elements, computing the effective memory bandwidth (GB/s) achieved by each. Comparing bandwidth against the GPU's theoretical peak reveals how close each implementation comes to being memory-bound — the hallmark of an optimally written reduction kernel.
+
 ```cpp
 // Use reduceL0 and reduceL5 from Section 2 above.
 // Main benchmarking harness:
@@ -603,6 +615,8 @@ int main() {
 ```
 
 ### Solution 2 (🟢)
+
+This program uses Thrust to sort 10 million random integers on the GPU with a single `thrust::sort` call, then measures throughput in millions of keys per second using CUDA events for precise timing. It demonstrates how Thrust's STL-like interface lets you achieve near-optimal GPU sort performance with minimal code.
 
 ```cpp
 #include <thrust/device_vector.h>

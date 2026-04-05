@@ -41,6 +41,8 @@ In C++ the only difference between `struct` and `class` is the **default access 
 
 ## 3. Class Definition with Access Specifiers
 
+This `BankAccount` class demonstrates the three access levels in action. Public methods form the external API, `protected` methods are available to derived classes (like a savings account that accrues interest), and private data members hide the internal state so callers cannot corrupt the balance directly.
+
 ```cpp
 #pragma once
 #include <string>
@@ -77,6 +79,8 @@ private:
 
 ### 4.1 Default Constructor
 
+Here we use `= default` to explicitly request the compiler-generated default constructor. The in-class member initializers (`= 0`, `= false`) ensure every `Sensor` object starts in a known state, even without constructor arguments.
+
 ```cpp
 class Sensor {
 public:
@@ -90,6 +94,8 @@ private:
 
 ### 4.2 Parameterized Constructor
 
+This `Point` class takes `x` and `y` coordinates through a parameterized constructor and initializes them using a member-initializer list (`: x_{x}, y_{y}`). The getters are marked `[[nodiscard]]` so the compiler warns if the caller ignores the return value.
+
 ```cpp
 class Point {
 public:
@@ -102,6 +108,8 @@ private:
 ```
 
 ### 4.3 Delegating Constructor (C++11)
+
+The single-argument constructor delegates to the two-argument version with `Rectangle(side, side)`, avoiding code duplication. The main constructor validates dimensions and throws on invalid input, so the delegating constructor inherits that validation automatically.
 
 ```cpp
 class Rectangle {
@@ -122,6 +130,8 @@ private:
 ---
 
 ## 5. Destructors
+
+This `FileHandle` class wraps a raw C file pointer using the RAII pattern: the constructor opens the file, and the destructor automatically closes it when the object goes out of scope. Copy operations are deleted to prevent double-close bugs.
 
 ```cpp
 #include <cstdio>
@@ -144,6 +154,8 @@ private:
 
 ## 6. Member Initializer Lists — Performance
 
+This example contrasts the wrong way (assignment in the body) with the right way (member-initializer list). Using the initializer list with `std::move` directly move-constructs `name_`, skipping the unnecessary default construction that body assignment would cause.
+
 ```cpp
 class Employee {
 public:
@@ -164,6 +176,8 @@ For non-trivial types (`std::string`, `std::vector`), the initializer list avoid
 
 ## 7. The `this` Pointer
 
+The `Counter` class returns `*this` from its methods to enable fluent method chaining — you can write `c.increment().increment().reset()` in a single expression. The `this` pointer is an implicit parameter that every non-static member function receives, pointing to the object the method was called on.
+
 ```cpp
 class Counter {
 public:
@@ -182,6 +196,8 @@ Common uses: disambiguating names, returning `*this` for fluent APIs, passing th
 
 ## 8. `const` Member Functions
 
+The `Temperature` class marks its getter methods (`celsius()`, `fahrenheit()`) as `const`, promising they won't modify the object. Only `set()` is non-const because it changes internal state. This distinction lets `const Temperature&` references safely call getters while preventing accidental mutation.
+
 ```cpp
 class Temperature {
 public:
@@ -199,6 +215,8 @@ A `const` object can **only** call `const` member functions. Forgetting `const` 
 ---
 
 ## 9. `static` Members and Methods
+
+This `Widget` class uses a `static inline` member `count_` to track how many `Widget` objects currently exist. The constructor increments it and the destructor decrements it, demonstrating that static data is shared across all instances rather than stored per-object.
 
 ```cpp
 class Widget {
@@ -224,6 +242,8 @@ public:
 
 ## 10. `friend` Functions and Classes
 
+This `Vector2D` class declares `operator<<` and `operator+` as `friend` functions so they can access the private `x_` and `y_` members. Friends are defined outside the class but have the same access as member functions, which is necessary for binary operators that need symmetric access to both operands.
+
 ```cpp
 #include <iostream>
 class Vector2D {
@@ -242,6 +262,8 @@ Vector2D operator+(const Vector2D& a, const Vector2D& b) {
     return {a.x_ + b.x_, a.y_ + b.y_};
 }
 ```
+
+Here, `Car` grants the entire `Engine` class friend access. This lets `Engine::burn()` directly modify `Car`'s private `fuel_` member — useful when two classes are tightly coupled by design.
 
 ```cpp
 class Car {
@@ -299,6 +321,8 @@ flowchart TD
 ---
 
 ## 12. Complete Example
+
+This `Student` class ties together every concept from this chapter: a delegating constructor, member-initializer list with `std::move`, static member for counting live instances, a private static factory method for auto-incrementing IDs, a friend `operator<<` for printing, and a destructor that decrements the count.
 
 ```cpp
 #include <iostream>
@@ -358,6 +382,8 @@ Implement `Matrix2x2` with `double data_[2][2]`, constructor from four doubles, 
 <details>
 <summary>🟢 Circle Solution</summary>
 
+This solution creates a `Circle` class with a validated radius, `const` area/circumference methods using `std::numbers::pi`, and a `friend operator<<` for formatted output.
+
 ```cpp
 #include <iostream>
 #include <numbers>
@@ -388,6 +414,8 @@ int main() {
 
 <details>
 <summary>🟡 InventoryItem Solution</summary>
+
+This solution uses a delegating constructor, static counter for auto-generated SKUs, and returns `*this` from `restock()` to enable method chaining like `g.restock(5).restock(3)`.
 
 ```cpp
 #include <iostream>
@@ -426,6 +454,8 @@ int main() {
 
 <details>
 <summary>🔴 Matrix2x2 Solution</summary>
+
+This solution implements a 2×2 matrix with friend operators for addition and multiplication, `const` methods for determinant and trace, and a `static identity()` factory method. The friend operators need access to the private `data_` array to perform element-wise math.
 
 ```cpp
 #include <iostream>
