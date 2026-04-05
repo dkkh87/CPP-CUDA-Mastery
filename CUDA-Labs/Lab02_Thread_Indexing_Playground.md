@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab02 && cd ~/cuda-labs/lab02
 ```
@@ -56,6 +58,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see how thread indices map to global IDs with different grid configurations.
 
 ```bash
 nvcc -o index_1d index_1d.cu
@@ -165,6 +169,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to see how 2D thread indices map to matrix row/column positions.
+
 ```bash
 nvcc -o index_2d index_2d.cu
 ./index_2d
@@ -224,6 +230,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see 3D thread indexing for volumetric data.
 
 ```bash
 nvcc -o index_3d index_3d.cu
@@ -312,6 +320,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to observe what happens with incorrect grid dimensions, including too few threads, too many threads, and exceeding hardware limits.
 
 ```bash
 nvcc -o grid_mistakes grid_mistakes.cu
@@ -414,6 +424,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see how 2D thread mapping works for a real image-processing operation.
 
 ```bash
 nvcc -o thread_mapping thread_mapping.cu

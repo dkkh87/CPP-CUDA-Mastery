@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's memory coalescing experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab07 && cd ~/cuda-labs/lab07
 ```
@@ -234,6 +236,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to measure the bandwidth impact of sequential, strided, and random memory access patterns.
+
 ```bash
 nvcc -O2 -o coalesce_bench coalesce_bench.cu
 ./coalesce_bench
@@ -423,6 +427,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to compare Array-of-Structures (AoS) versus Structure-of-Arrays (SoA) data layouts.
 
 ```bash
 nvcc -O2 -o soa_vs_aos soa_vs_aos.cu

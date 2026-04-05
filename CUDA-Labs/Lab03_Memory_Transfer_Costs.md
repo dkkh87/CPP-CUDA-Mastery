@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's memory transfer experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab03 && cd ~/cuda-labs/lab03
 ```
@@ -128,6 +130,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to measure PCIe transfer bandwidth for different data sizes.
 
 ```bash
 nvcc -O2 -o transfer_bench transfer_bench.cu
@@ -283,6 +287,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to find the compute-to-transfer ratio where the GPU becomes worthwhile.
+
 ```bash
 nvcc -O2 -o ratio_sweep ratio_sweep.cu
 ./ratio_sweep
@@ -413,6 +419,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to compare pageable (normal `malloc`) versus pinned (`cudaMallocHost`) memory transfer speeds.
 
 ```bash
 nvcc -O2 -o pinned_vs_pageable pinned_vs_pageable.cu
@@ -571,6 +579,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see an ASCII visualization of how time is split between data transfer and GPU computation.
 
 ```bash
 nvcc -O2 -o time_breakdown time_breakdown.cu

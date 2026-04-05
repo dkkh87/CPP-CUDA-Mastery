@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's warp divergence experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab05 && cd ~/cuda-labs/lab05
 ```
@@ -95,6 +97,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see which threads take which branch in divergent versus non-divergent kernels.
 
 ```bash
 nvcc -o diverge_visual diverge_visual.cu
@@ -326,6 +330,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to measure the performance cost of different divergence patterns — from zero divergence to asymmetric workloads.
+
 ```bash
 nvcc -O2 -o diverge_bench diverge_bench.cu
 ./diverge_bench
@@ -506,6 +512,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to compare three strategies for eliminating warp divergence: random data (divergent), sorted data (non-divergent), and branchless arithmetic.
 
 ```bash
 nvcc -O2 -o diverge_fix diverge_fix.cu

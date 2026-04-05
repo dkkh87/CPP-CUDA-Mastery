@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's shared memory experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab04 && cd ~/cuda-labs/lab04
 ```
@@ -255,6 +257,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to compare naive transpose, shared-memory transpose, and shared-memory with bank-conflict padding.
+
 ```bash
 nvcc -O2 -o transpose transpose.cu
 ./transpose
@@ -390,6 +394,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to measure the performance impact of different shared memory access strides — from conflict-free to worst-case 32-way bank conflicts.
 
 ```bash
 nvcc -O2 -o bank_conflicts bank_conflicts.cu

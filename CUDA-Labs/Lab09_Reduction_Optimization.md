@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's parallel reduction experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab09 && cd ~/cuda-labs/lab09
 ```
@@ -335,6 +337,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to see the performance journey from naive reduction through five optimization levels.
+
 ```bash
 nvcc -O2 -o reduction reduction.cu
 ./reduction
@@ -472,6 +476,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to compare your hand-optimized reduction against NVIDIA's CUB library implementation.
 
 ```bash
 nvcc -O2 -o reduction_cub reduction_cub.cu

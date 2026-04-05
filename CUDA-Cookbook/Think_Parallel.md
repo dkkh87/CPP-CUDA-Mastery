@@ -10,6 +10,8 @@
 
 ### CPU Thinking: "What does ONE thread do, step by step?"
 
+On a CPU, you write a `for` loop that processes elements one by one (or a few at a time with multithreading). The hardware executes iterations sequentially because CPUs are optimized for single-thread performance.
+
 ```cpp
 // CPU: process 1 million elements with 1 thread (or a few)
 for (int i = 0; i < N; i++) {
@@ -22,6 +24,8 @@ Even with multi-threading you might get 16–64 threads. You think sequentially
 because the hardware *is* sequential.
 
 ### GPU Thinking: "What does EACH of 1 million threads do simultaneously?"
+
+On a GPU, there is no loop — instead you launch millions of threads, each processing one element. The `if (i < N)` guard handles the edge case where the total thread count exceeds the array size. The kernel describes what ONE element does, and the hardware runs it for ALL elements simultaneously.
 
 ```cpp
 // GPU: 1 million threads, each handles ONE element
@@ -202,6 +206,8 @@ A **warp** is 32 threads. The GPU executes instructions warp-by-warp.
 - Array sizes padded to multiples of 32 avoid wasted threads
 - `if` statements within a warp cause **divergence** — both paths execute serially
 
+This example shows warp divergence: within a 32-thread warp, even and odd threads take different code paths. The GPU must execute both paths sequentially, masking inactive threads. The better approach groups work so entire warps take the same path, eliminating the divergence penalty.
+
 ```cpp
 // BAD: 100 threads per block (100/32 = 3.125 warps → 4 warps, 28 threads wasted)
 kernel<<<N/100, 100>>>(...);
@@ -242,6 +248,9 @@ Each example follows the same pattern:
 ### Conversion 1: Array Sum — Loop → Parallel Reduction
 
 **CPU Code:**
+
+The CPU version sums an array sequentially — each iteration depends on the previous accumulation. This looks impossible to parallelize, but because addition is associative, we can restructure it as a tree: pair up elements, sum pairs in parallel, and repeat until one value remains.
+
 ```cpp
 float sum = 0.0f;
 for (int i = 0; i < N; i++) {
@@ -314,6 +323,9 @@ a second kernel pass (or atomic add) to combine block-level partial sums.
 ### Conversion 2: Array Map — Direct 1:1 Mapping (Trivial)
 
 **CPU Code:**
+
+The CPU version applies a formula to each element independently. Since no element depends on any other, this is "embarrassingly parallel" — the simplest case for GPU conversion.
+
 ```cpp
 for (int i = 0; i < N; i++) {
     output[i] = sqrtf(input[i]) * 2.0f + 1.0f;
@@ -347,6 +359,9 @@ a multiple of the block size. This is the template for most simple kernels.
 ### Conversion 3: Matrix Multiply — Nested Loops → 2D Grid
 
 **CPU Code:**
+
+The CPU version uses three nested loops: the outer two iterate over output rows and columns, while the inner loop computes a dot product. The outer two loops parallelize perfectly (each output element is independent), creating a 2D grid of GPU threads.
+
 ```cpp
 // C = A × B, dimensions: A[M×K], B[K×N], C[M×N]
 for (int row = 0; row < M; row++) {
@@ -416,6 +431,9 @@ compute-bound one.
 ### Conversion 4: Histogram — Sequential Counting → Atomics
 
 **CPU Code:**
+
+The CPU version counts occurrences of each value into histogram bins. Multiple elements may map to the same bin, creating write conflicts on the GPU. The solution uses "privatization" — each block maintains a local histogram in fast shared memory, then merges results into the global histogram with atomic operations.
+
 ```cpp
 int histogram[NUM_BINS] = {0};
 for (int i = 0; i < N; i++) {
@@ -473,6 +491,9 @@ same location.
 ### Conversion 5: Prefix Scan — Blelloch Algorithm
 
 **CPU Code:**
+
+The CPU version computes an inclusive prefix sum where each element depends on all previous elements. Despite this serial dependency, the Blelloch scan algorithm achieves O(log N) parallel steps through an up-sweep (reduction) followed by a down-sweep (distribution) phase.
+
 ```cpp
 // Inclusive prefix sum
 for (int i = 1; i < N; i++) {
@@ -548,6 +569,9 @@ scan blocks, scan the block sums, then add block sums back.
 ### Conversion 6: Finding Max/Min — Parallel Reduction Variant
 
 **CPU Code:**
+
+The CPU version finds the maximum by scanning linearly. Since `max` is associative and commutative (like addition), the exact same tree reduction pattern from Conversion 1 applies — just replace `+` with `max`. This pattern works for any associative binary operator.
+
 ```cpp
 float maxVal = data[0];
 for (int i = 1; i < N; i++) {
@@ -608,6 +632,9 @@ accepts any binary functor.
 ### Conversion 7: Sorting — Radix Sort
 
 **CPU Code:**
+
+The CPU version uses `std::sort` (typically introsort). For GPU parallelization, the algorithm must change entirely: radix sort processes one bit at a time using counting and prefix scan — both highly parallel operations. This illustrates that the best parallel algorithm is often a completely different algorithm than the best sequential one.
+
 ```cpp
 std::sort(data.begin(), data.end());
 ```
@@ -686,6 +713,9 @@ For production, use `thrust::sort` or `cub::DeviceRadixSort`.
 ### Conversion 8: BFS Graph Traversal — Frontier Expansion
 
 **CPU Code:**
+
+The CPU version uses a queue-based BFS. On the GPU, all nodes at the same distance from the source (the "frontier") can be expanded in parallel. `atomicCAS` on the level array ensures each node is visited exactly once, and `atomicAdd` builds the next frontier without duplicates.
+
 ```cpp
 std::queue<int> frontier;
 std::vector<bool> visited(numNodes, false);
@@ -756,6 +786,9 @@ consider assigning one thread per *edge* instead of per *node*.
 ### Conversion 9: Image Convolution — 2D Tiling with Halo
 
 **CPU Code:**
+
+The CPU version applies a 3×3 convolution filter to an image by reading a neighborhood around each pixel. On the GPU, neighboring threads read overlapping data — the "halo" or "ghost cells" at tile boundaries. Shared memory eliminates redundant global loads by loading each tile plus its halo once.
+
 ```cpp
 // 3×3 convolution kernel applied to an image
 for (int y = 1; y < height - 1; y++) {
@@ -1101,6 +1134,8 @@ Always start with a correct CPU implementation. You need it for:
 - Benchmarking speedup (meaningless without a baseline)
 - Debugging (when the GPU kernel produces wrong results)
 
+This template shows the starting point for any GPU optimization: a correct CPU reference implementation. You need this to validate GPU results (comparing with floating-point tolerance) and to have a meaningful baseline for benchmarking speedup.
+
 ```cpp
 void cpuReference(float* output, const float* input, int N) {
     for (int i = 0; i < N; i++) {
@@ -1151,6 +1186,8 @@ Grid large enough?             → Enough blocks to fill all SMs
 ```
 
 ### Step 4: Profile, Don't Guess
+
+Use NVIDIA's profiling tools rather than guessing where the bottleneck is. Nsight Compute shows kernel-level metrics (memory throughput, compute utilization, occupancy), while Nsight Systems shows the overall CPU/GPU timeline to identify pipeline stalls.
 
 ```bash
 # Nsight Compute: detailed kernel analysis

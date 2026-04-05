@@ -30,6 +30,8 @@ locate synchronization points → identify tiling/warp-level patterns.
 
 ### 1.2 Common Thread-to-Data Mappings
 
+These are the three most common patterns for mapping CUDA threads to data elements. The 1D mapping is used for arrays, the 2D mapping for matrices and images, and the grid-stride loop handles arrays larger than the total thread count by having each thread process multiple elements in a striding pattern.
+
 ```cpp
 // 1D mapping
 int idx = blockIdx.x * blockDim.x + threadIdx.x;

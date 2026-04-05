@@ -24,6 +24,8 @@ By the end of this lab you will:
 
 ### Verify your environment
 
+Run these commands to verify your CUDA installation is working. `nvcc` is the CUDA compiler and `nvidia-smi` shows your GPU's status and driver version.
+
 ```bash
 # Check CUDA compiler is available
 nvcc --version
@@ -69,6 +71,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile the CUDA source file with `nvcc` and run the resulting binary.
 
 ```bash
 nvcc -o hello_gpu hello_gpu.cu
@@ -241,6 +245,8 @@ int main(int argc, char **argv) {
 
 ### Compile and run
 
+Compile with `-O2` optimization and run with different array sizes to see how the GPU-vs-CPU performance changes.
+
 ```bash
 nvcc -O2 -o vecadd vecadd.cu
 ./vecadd            # Default: 1M elements
@@ -385,6 +391,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run the crossover sweep to find the array size where the GPU starts outperforming the CPU.
 
 ```bash
 nvcc -O2 -o crossover crossover.cu

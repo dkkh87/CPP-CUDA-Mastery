@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's matrix multiplication experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab10 && cd ~/cuda-labs/lab10
 ```
@@ -459,6 +461,8 @@ int main(int argc, char **argv) {
 ```
 
 ### Compile and run
+
+Compile with cuBLAS linked and run to compare naive, tiled, register-blocked, and cuBLAS GEMM implementations.
 
 ```bash
 nvcc -O2 -o gemm gemm.cu -lcublas

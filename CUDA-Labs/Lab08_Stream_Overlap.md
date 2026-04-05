@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's stream overlap experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab08 && cd ~/cuda-labs/lab08
 ```
@@ -70,6 +72,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to check whether your GPU supports concurrent copy-and-execute operations.
 
 ```bash
 nvcc -o check_overlap check_overlap.cu
@@ -225,6 +229,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to compare sequential execution with 2, 4, 8, 16, and 32 streams.
 
 ```bash
 nvcc -O2 -o stream_overlap stream_overlap.cu
@@ -421,6 +427,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see a detailed timeline showing how each stream's H2D, compute, and D2H phases overlap.
 
 ```bash
 nvcc -O2 -o stream_timeline stream_timeline.cu

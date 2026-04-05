@@ -22,6 +22,8 @@ By the end of this lab you will:
 
 ## Setup
 
+Create a working directory for this lab's occupancy experiments.
+
 ```bash
 mkdir -p ~/cuda-labs/lab06 && cd ~/cuda-labs/lab06
 ```
@@ -74,6 +76,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see your GPU's occupancy-related hardware limits.
 
 ```bash
 nvcc -o device_limits device_limits.cu
@@ -186,6 +190,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to sweep block sizes from 32 to 1024 and see how each affects occupancy and performance.
 
 ```bash
 nvcc -O2 -o blocksize_sweep blocksize_sweep.cu
@@ -346,6 +352,8 @@ int main() {
 
 ### Compile and run
 
+Compile and run to see how register usage per thread affects occupancy and whether `__launch_bounds__` can help.
+
 ```bash
 nvcc -O2 -o register_pressure register_pressure.cu
 ./register_pressure
@@ -456,6 +464,8 @@ int main() {
 ```
 
 ### Compile and run
+
+Compile and run to see how increasing shared memory usage per block reduces occupancy.
 
 ```bash
 nvcc -O2 -o smem_occupancy smem_occupancy.cu
