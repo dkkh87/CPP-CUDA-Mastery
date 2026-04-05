@@ -44,6 +44,8 @@ sequenceDiagram
 
 ### 1. TCP Echo Server (Blocking)
 
+This is the simplest possible TCP server. It creates a socket, binds it to port 8080, and listens for connections. When a client connects, `accept` returns a new file descriptor for that connection. The server reads whatever the client sent and immediately sends it back (echo), then closes the connection. This is "blocking" because `accept` and `recv` pause the entire program until data arrives — fine for learning, but it can only serve one client at a time.
+
 ```cpp
 #include <iostream>
 #include <cstring>
@@ -77,6 +79,8 @@ int main() {
 
 ### 2. TCP Client
 
+This client connects to the echo server above. It creates a socket, converts the IP address string `"127.0.0.1"` to binary form with `inet_pton`, and calls `connect` to initiate the TCP three-way handshake. Once connected, it sends a message and reads back the server's reply. The `htons(8080)` call converts the port number from your machine's byte order to "network byte order" (big-endian), which is required by the TCP/IP protocol.
+
 ```cpp
 #include <iostream>
 #include <cstring>
@@ -105,6 +109,8 @@ int main() {
 
 ### 3. UDP Echo (Receiver + Sender)
 
+Unlike TCP, UDP is connectionless — there's no handshake or guaranteed delivery. The receiver binds to a port and waits for a datagram with `recvfrom`, which also captures the sender's address so it can reply. This makes UDP simpler and lower-latency than TCP, which is why it's used for DNS lookups, game state updates, and video streaming where dropping an occasional packet is better than waiting for retransmission.
+
 ```cpp
 // --- UDP Receiver ---
 #include <iostream>
@@ -126,6 +132,8 @@ int main() {
     close(fd);
 }
 ```
+
+This is the UDP sender counterpart. It creates a datagram socket, sends `"ping"` to the receiver's address without establishing a connection first, and then waits for the echoed reply. Because UDP has no connection state, each `sendto` call is independent — the kernel just wraps the data in a UDP/IP header and sends it out.
 
 ```cpp
 // --- UDP Sender ---
@@ -162,6 +170,8 @@ flowchart TD
     F --> C
     G --> C
 ```
+
+This is a complete `epoll`-based TCP echo server that can handle many clients concurrently in a single thread. The server socket is set to non-blocking so `accept` never stalls the event loop. Each new client is also set to non-blocking and registered with `epoll`. The `EPOLLET` flag enables edge-triggered mode, which only notifies when new data arrives (not repeatedly while data remains). The main loop calls `epoll_wait` to sleep until something happens, then processes only the ready file descriptors — this is O(1) per event, enabling hundreds of thousands of concurrent connections.
 
 ```cpp
 #include <iostream>
@@ -213,6 +223,8 @@ int main() {
 ```
 
 ### 5. io_uring Echo Server (Linux 5.6+)
+
+This echo server uses `io_uring` instead of `epoll` — a newer Linux I/O interface where you submit operations (accept, recv, send) into a shared ring buffer and the kernel completes them asynchronously. Instead of being told "this fd is ready, now make a syscall," you tell the kernel "do this read for me" and it notifies you when the data is already in your buffer. This eliminates per-operation syscall overhead and is the approach used by modern high-performance databases like ScyllaDB and TigerBeetle.
 
 ```cpp
 #include <liburing.h>
@@ -267,6 +279,8 @@ int main() {
 
 ### 6. Boost.Asio Async Echo Server
 
+This implements the same echo server using Boost.Asio, a portable C++ networking library that wraps platform-specific APIs (epoll on Linux, kqueue on macOS, IOCP on Windows). Each client connection is managed by a `Session` object that uses `shared_from_this()` to keep itself alive during async operations. The `async_read_some` / `async_write` calls register callbacks that the event loop invokes when I/O completes — no threads needed. This is the "proactor" pattern used by production C++ servers.
+
 ```cpp
 #include <boost/asio.hpp>
 #include <iostream>
@@ -314,6 +328,8 @@ int main() {
 
 ### 7. Protocol Framing — Length-Prefixed Messages
 
+TCP is a byte stream with no concept of message boundaries — two `send` calls might arrive as one `recv`, or one `send` might arrive in two `recv`s. This code solves that by prepending a 4-byte length header (in network byte order) before each message. The receiver first reads exactly 4 bytes to learn the message size, then reads exactly that many bytes. The `recv_exact` helper loops until all requested bytes arrive, handling partial reads that are normal in TCP.
+
 ```cpp
 #include <cstdint>
 #include <vector>
@@ -347,6 +363,8 @@ std::vector<char> recv_message(int fd) {
 ```
 
 ### 8. Connection Pool
+
+This implements a thread-safe connection pool that pre-creates a fixed number of socket connections and lends them out on demand. `acquire` blocks (via a condition variable) if all connections are in use, and `release` returns one to the pool and wakes a waiting thread. This amortizes the cost of TCP handshakes and TLS negotiation — instead of connecting and disconnecting per request, you reuse existing connections. Database drivers, HTTP clients, and gRPC channels all use this pattern.
 
 ```cpp
 #include <queue>
@@ -413,6 +431,8 @@ Parse `GET` requests, serve files, return proper headers, support keep-alive wit
 
 ### 🟢 TCP Time Server
 
+This server listens on port 1300 and sends the current time string to each client that connects, then immediately closes the connection. It's the simplest useful TCP server — it demonstrates the full `socket → bind → listen → accept → send → close` lifecycle with no request parsing needed.
+
 ```cpp
 #include <iostream>
 #include <cstring>
@@ -442,6 +462,8 @@ int main() {
 
 ### 🟡 Chat Room — Key Logic
 
+This pseudocode outlines the key change needed to turn the epoll echo server into a chat room: instead of echoing a message back to the sender, broadcast it to every other connected client. You maintain a list of connected client file descriptors and loop through them on each received message, skipping the sender.
+
 ```cpp
 // Extend the epoll example: maintain std::vector<int> clients.
 // On recv from client i: for each other client j, send(j, buf, n, 0).
@@ -449,6 +471,8 @@ int main() {
 ```
 
 ### 🔴 HTTP Server — Core Parsing
+
+This shows the essential logic for a minimal HTTP/1.1 server: parsing the request line (`GET /index.html HTTP/1.1`) into method, path, and version, then serving the requested file from a root directory. The response includes proper HTTP headers (`Content-Length`, `Connection: keep-alive`). This is a simplified version of what web servers like NGINX do — in production you'd also handle chunked encoding, URL decoding, and security checks.
 
 ```cpp
 #include <string>

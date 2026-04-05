@@ -48,6 +48,8 @@ stateDiagram-v2
 
 ### fork, exec, wait
 
+This program demonstrates the fundamental Unix process creation pattern. `fork()` duplicates the current process — the child gets a copy of everything. In the child (where `fork` returns 0), we call `execlp` to replace the child's code with the `ls` program. The parent (where `fork` returns the child's PID) calls `waitpid` to pause until the child finishes, preventing zombie processes. This separation of "create a copy" and "replace the program" is what makes Unix shell pipelines possible — you can redirect file descriptors between `fork` and `exec`.
+
 ```cpp
 #include <unistd.h>
 #include <sys/wait.h>
@@ -85,6 +87,8 @@ int main() {
 ## 2 — Core System Calls
 
 ### read / write / open / close
+
+This shows the most basic file I/O using raw system calls — no C++ streams, no buffering. `open` returns a file descriptor (just a small integer), `read` copies bytes from the kernel's file buffer into your array, and `write` sends bytes to stdout (file descriptor 1). These are the fundamental building blocks that every higher-level I/O library (`fread`, `std::ifstream`, Python's `open()`) is built on top of.
 
 ```cpp
 #include <fcntl.h>
@@ -136,6 +140,8 @@ Signals are asynchronous notifications delivered to a process. The kernel interr
 | `SIGUSR1` (10) | Terminate | Application-defined |
 
 ### Signal Handler Example
+
+This program installs a custom handler for SIGINT (the signal sent when you press Ctrl-C). Instead of terminating immediately, the handler sets an atomic boolean flag to `false`, and the main loop checks that flag to exit gracefully. The `sigaction` API is used instead of the older `signal()` because its behavior is well-defined across platforms. The handler only touches an atomic variable — calling functions like `printf` inside a signal handler is unsafe because the signal could arrive while `printf` holds an internal lock, causing a deadlock.
 
 ```cpp
 #include <csignal>
@@ -200,6 +206,8 @@ int main() {
 // Compile: g++ -o writer writer.cpp -lrt
 ```
 
+This is the reader side of the shared memory pair. It opens the same named shared memory object (`/my_shm`) created by the writer, maps it read-only into its own address space, and reads the message. Both processes see the same physical memory pages — no data is copied through the kernel, making this the fastest IPC mechanism available. After reading, it calls `shm_unlink` to clean up the shared memory object.
+
 ```cpp
 // reader.cpp
 #include <fcntl.h>
@@ -257,6 +265,8 @@ int main() {
 ```
 
 ### epoll — Scalable I/O Multiplexing
+
+This demonstrates Linux's `epoll` interface for monitoring multiple file descriptors efficiently. Instead of checking each fd one by one (like `select` does), `epoll` maintains an internal data structure and only returns the fds that are actually ready. Here it watches stdin with a 5-second timeout — when you type something, `epoll_wait` returns immediately with that fd marked as readable. This O(1)-per-ready-fd efficiency is what lets servers like NGINX handle tens of thousands of concurrent connections in a single thread.
 
 ```cpp
 #include <sys/epoll.h>
@@ -358,6 +368,8 @@ int main() {
 
 ### Name Mangling
 
+This short example shows C++ name mangling in action. When you compile a C++ function, the compiler encodes the function name and parameter types into a "mangled" symbol (e.g., `_Z7computeid` for `compute(int, double)`). This allows C++ to support function overloading — two functions with the same name but different parameter types get different symbols. You can see the mangled names with the `nm` tool and decode them with `c++filt`.
+
 ```cpp
 // Compile with: g++ -c mangling.cpp && nm mangling.o | grep compute
 int compute(int a, double b) { return a + static_cast<int>(b); }
@@ -409,6 +421,8 @@ Implement a lock-free single-producer single-consumer ring buffer in POSIX share
 
 ### 🟢 Solution — Safe Shutdown
 
+This solution uses an atomic boolean flag and `sigaction` to handle Ctrl-C gracefully. When SIGINT arrives, the handler sets `run` to false without calling any unsafe functions. The main loop checks this flag each iteration, prints the final count, and exits cleanly — no crash, no lost state.
+
 ```cpp
 #include <csignal>
 #include <cstdio>
@@ -434,6 +448,8 @@ int main() {
 ```
 
 ### 🟡 Solution — Pipe Calculator
+
+This creates a parent-child process pair connected by a pipe. The parent writes an arithmetic expression string (like `"12+7"`) into the pipe's write end, then closes it. The child reads from the pipe's read end, parses the expression with `sscanf`, evaluates it, and prints the result. This demonstrates how Unix pipes enable inter-process communication — one process produces data, the other consumes it, with the kernel managing the buffer in between.
 
 ```cpp
 #include <unistd.h>
@@ -469,6 +485,8 @@ int main() {
 ```
 
 ### 🔴 Solution — Shared-Memory Ring Buffer (Producer)
+
+This implements a lock-free single-producer ring buffer in POSIX shared memory. The `RingBuf` struct contains a fixed-size array of message slots plus atomic `head` and `tail` indices. The producer writes to the slot at `head` and advances it; the consumer (in a separate process) reads from `tail`. The `memory_order_release` on the head store ensures the message data is visible before the consumer sees the updated index. `placement-new` initializes the atomics in the shared memory region. This pattern is used in high-performance message queues where mutex overhead is unacceptable.
 
 ```cpp
 #include <fcntl.h>

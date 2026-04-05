@@ -36,6 +36,8 @@ from any language.
 
 ### 1.1 Header Compatibility
 
+This header file is designed to work from both C and C++ code. The `#ifdef __cplusplus` guard wraps the function declarations in `extern "C"` only when compiled by a C++ compiler — this disables name mangling so the symbols match what a C linker expects. A C compiler ignores the guard entirely. This pattern is the standard way to write headers for libraries that need to be callable from both languages.
+
 ```cpp
 // mathlib.h — usable from both C and C++
 #ifndef MATHLIB_H
@@ -57,6 +59,8 @@ int    mat_inv(double* out, const double* in, int n);
 ```
 
 ### 1.2 Implementation and Linking
+
+This is the implementation of the C-ABI function declared in the header above. The `extern "C"` on the definition ensures the compiled symbol name is simply `vec_dot` (not a mangled C++ name like `_Z7vec_dotPKdS0_i`). The build commands show how to compile it into a shared library (`.so`) with `-shared -fPIC`, and how another program links against it with `-L. -lmathlib`.
 
 ```cpp
 // mathlib.cpp
@@ -135,6 +139,8 @@ PYBIND11_MODULE(py_math, m) {
 
 ### 2.2 ctypes — Quick FFI Without Compilation Deps
 
+This C++ file exposes a single function (`norm_l2`) with C linkage and compiles it into a shared library. Unlike pybind11, the Python side doesn't need any C++ compilation step — it uses `ctypes` to load the `.so` file at runtime and call the function directly. You manually declare the argument and return types in Python, which is error-prone but requires zero build dependencies.
+
 ```cpp
 // fastops.cpp — compiled to shared library
 #include <cmath>
@@ -149,8 +155,9 @@ extern "C" {
 // Build: g++ -shared -fPIC -o libfastops.so fastops.cpp
 ```
 
+This Python script loads the shared library at runtime using `ctypes.CDLL` and calls the C function. The `restype` and `argtypes` declarations tell Python how to convert between Python objects and C types. The NumPy array's underlying memory is passed directly to C via `ctypes.data_as` — no copy is made, so this is efficient for large arrays.
+
 ```python
-# use_fastops.py
 import ctypes, numpy as np
 
 lib = ctypes.CDLL("./libfastops.so")
@@ -181,11 +188,15 @@ def py_dot(double[:] a, double[:] b):
 
 ### 3.1 Rust FFI via `extern "C"`
 
+This shows the simplest way to call between Rust and C++. The Rust function uses `#[no_mangle]` to prevent Rust's own name mangling and `extern "C"` to use the C calling convention. The C++ side declares the same function as `extern "C"` and calls it like any C function. At link time, the Rust-compiled library provides the symbol. This approach works but is "unsafe" in Rust terms — there are no compile-time checks that the types match across the boundary.
+
 ```rust
 // lib.rs
 #[no_mangle]
 pub extern "C" fn rust_add(a: f64, b: f64) -> f64 { a + b }
 ```
+
+This C++ program calls the Rust function declared above. It simply declares the function signature with `extern "C"` and links against the Rust-compiled static library. The Cargo build command compiles the Rust code, and the `g++` command links the result.
 
 ```cpp
 // call_rust.cpp
@@ -230,6 +241,8 @@ fn validate_input(data: &[f64]) -> bool {
 
 ### 4.1 PyTorch Custom CUDA Extension
 
+This is a complete PyTorch CUDA extension that runs a vector addition on the GPU. The `__global__` function is a CUDA kernel — it runs on thousands of GPU threads simultaneously, each handling one element. The C++ wrapper function validates that tensors are on CUDA, calculates the grid dimensions, and launches the kernel. The `PYBIND11_MODULE` macro exposes the function to Python. This is the same pattern PyTorch itself uses internally for its GPU operations.
+
 ```cpp
 // vector_add_kernel.cu
 #include <torch/extension.h>
@@ -260,8 +273,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 }
 ```
 
+This `setup.py` file tells PyTorch's build system how to compile the CUDA extension. `CUDAExtension` handles finding the CUDA toolkit, setting the right compiler flags, and producing a Python-importable `.so` file. You can also skip this file entirely and use `torch.utils.cpp_extension.load()` for JIT (just-in-time) compilation during development.
+
 ```python
-# setup.py for JIT or ahead-of-time build
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
@@ -276,8 +290,11 @@ setup(
 
 ### 4.2 Using CuPy for Lightweight CUDA-Python Interop
 
+### 4.2 Using CuPy for Lightweight CUDA-Python Interop
+
+CuPy provides a simpler alternative to PyTorch extensions for running custom CUDA kernels from Python. The `RawKernel` class compiles CUDA C++ code at runtime (JIT) and lets you launch it with Python syntax. This SAXPY kernel (`y = a*x + y`) is a classic GPU benchmark — each thread computes one element independently. CuPy handles GPU memory management and data transfers automatically, making it ideal for quick prototyping.
+
 ```python
-import cupy as cp
 
 kernel = cp.RawKernel(r'''
 extern "C" __global__
@@ -298,6 +315,8 @@ kernel((n // 256,), (256,), (2.0, x, y, n))  # y[0] = 2.0
 
 ### 5.1 Symbol Visibility
 
+This header defines macros that control which functions are visible outside a shared library. On Linux, `-fvisibility=hidden` hides all symbols by default, and `__attribute__((visibility("default")))` explicitly exports the ones you want. On Windows, the equivalent is `__declspec(dllexport/dllimport)`. The `BUILDING_MYLIB` guard switches between export (when compiling the library) and import (when using it). Hiding symbols reduces binary size, speeds up loading, and prevents accidental ABI breakage.
+
 ```cpp
 // visibility.h — controlling exported symbols
 #if defined(_WIN32)
@@ -316,6 +335,8 @@ kernel((n // 256,), (256,), (2.0, x, y, n))  # y[0] = 2.0
 ```
 
 ### 5.2 Runtime Loading with `dlopen`
+
+This demonstrates loading a shared library at runtime instead of at compile time. `dlopen` opens the `.so` file, and `dlsym` looks up a function by its string name — this is how plugin systems work (e.g., loading game mods or database extensions). The function pointer is cast to the correct type and called normally. Error checking with `dlerror()` is essential because misspelled symbol names fail silently otherwise. This decoupling means the main program can run even if the plugin library doesn't exist.
 
 ```cpp
 // dlopen_demo.cpp
@@ -417,6 +438,8 @@ build scripts for both sides.
 
 ### S1: C-ABI Wrapper
 
+This solution defines a simple factorial function with `extern "C"` to ensure the compiled symbol is unmangled. After building as a shared library, `nm -D` confirms that the symbol name is plain `factorial` — not something like `_Z9factoriali`. This is the foundation for making C++ code callable from any other language.
+
 ```cpp
 extern "C" int factorial(int n) {
     int r = 1;
@@ -429,6 +452,8 @@ extern "C" int factorial(int n) {
 
 ### S2: ctypes Caller
 
+This Python script loads the compiled shared library and calls the `factorial` function using `ctypes`. The `restype` and `argtypes` declarations are mandatory to ensure correct type conversion between Python integers and C `int` values — without them, ctypes defaults to `int` returns but may mishandle other types.
+
 ```python
 import ctypes
 lib = ctypes.CDLL("./libfact.so")
@@ -438,6 +463,8 @@ print(f"10! = {lib.factorial(10)}")  # 3628800
 ```
 
 ### S3: pybind11 Vector3
+
+This uses pybind11 to expose a C++ `Vector3` struct to Python as a fully usable class. `py::init<double, double, double>()` generates a constructor, `.def("length", ...)` exposes the method, and `__repr__` provides a readable string representation for debugging. pybind11 handles all the reference counting and type conversion automatically — Python users can create `Vector3` objects and call `.length()` as if it were pure Python.
 
 ```cpp
 #include <pybind11/pybind11.h>
@@ -463,6 +490,8 @@ PYBIND11_MODULE(vec3, m) {
 
 ### S4: CUDA ReLU Extension
 
+This CUDA kernel implements element-wise ReLU (Rectified Linear Unit) — the most common activation function in neural networks. Each GPU thread processes one element, outputting `max(0, x[i])`. The pybind11 binding exposes it as a Python function that accepts and returns PyTorch tensors. The grid size calculation `(n+255)/256` ensures enough threads are launched to cover all elements, even when the array size isn't a multiple of the block size (256).
+
 ```cpp
 // relu_ext.cu
 #include <torch/extension.h>
@@ -481,8 +510,9 @@ torch::Tensor relu_cuda(torch::Tensor x) {
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) { m.def("relu", &relu_cuda); }
 ```
 
+This Python test uses PyTorch's JIT compilation (`load`) to compile the CUDA extension on the fly, then verifies that all output values are non-negative — confirming that ReLU correctly zeroed out the negative inputs.
+
 ```python
-from torch.utils.cpp_extension import load
 import torch
 ext = load(name="relu_ext", sources=["relu_ext.cu"])
 x = torch.randn(1024, device="cuda")

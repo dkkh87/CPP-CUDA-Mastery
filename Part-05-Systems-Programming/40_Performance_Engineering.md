@@ -42,6 +42,8 @@ It is the practice of analyzing, measuring, and systematically improving softwar
 
 ### perf (Linux)
 
+`perf` is the standard Linux profiling tool that reads hardware performance counters built into the CPU. `perf stat` gives you a quick summary of cache misses, branch mispredictions, and instructions-per-cycle. `perf record` samples the call stack at regular intervals so you can see which functions consume the most time, and `perf report` displays the results interactively.
+
 ```bash
 perf stat ./my_program           # Summary counters
 perf record -g ./my_program      # Sample call stacks
@@ -50,12 +52,16 @@ perf report                      # Interactive report
 
 ### Valgrind / Callgrind
 
+Valgrind's Callgrind tool simulates the CPU and tracks every function call and instruction, producing a detailed profile without needing hardware counters. It's slower than `perf` (10–50× overhead) but works on any Linux machine. The output file can be visualized with `kcachegrind`, a GUI that shows per-function costs and call graphs.
+
 ```bash
 valgrind --tool=callgrind ./my_program
 kcachegrind callgrind.out.*
 ```
 
 ### Flame Graphs
+
+This pipeline converts `perf` sampling data into a flame graph — a visualization where each horizontal bar is a function and its width shows how much time it consumed. Wider bars are your hotspots. The three commands collapse raw stack traces, then render them as an SVG you can open in any browser.
 
 ```bash
 perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg
@@ -115,6 +121,8 @@ flowchart TD
 ## Code Examples
 
 ### 1. Cache-Friendly Programming: AoS vs SoA
+
+This benchmark compares two ways of laying out particle data in memory. "Array of Structs" (AoS) puts all fields of each particle together — convenient but wasteful when you only need positions, because the CPU loads velocity, mass, and ID bytes into cache lines you never use. "Struct of Arrays" (SoA) stores each field in its own contiguous array, so iterating over positions loads only position data into cache. The SoA version typically runs 2–5× faster for this kind of bulk field update.
 
 ```cpp
 #include <vector>
@@ -185,6 +193,8 @@ int main() {
 
 ### 2. Branch Prediction and Branchless Programming
 
+This program demonstrates how branch misprediction hurts performance. The "branchy" version uses an `if` statement to conditionally add values — with random data, the CPU's branch predictor guesses wrong ~50% of the time, costing ~15 wasted cycles per miss. The "branchless" version replaces the `if` with a bitmask trick: `-(v >= 128)` produces either 0 or -1 (all bits set), and ANDing with the value selects it without any branch instruction. The benchmark also shows that sorting the data first helps the branchy version, because the predictor can learn the pattern of "all below 128, then all above."
+
 ```cpp
 #include <algorithm>
 #include <cstdio>
@@ -232,6 +242,8 @@ int main() {
 ```
 
 ### 3. SIMD Vectorization with AVX2 Intrinsics
+
+This code computes a dot product two ways: scalar (one multiply-add at a time) and AVX2 (eight float multiply-adds per instruction using 256-bit SIMD registers). The AVX2 version uses `_mm256_fmadd_ps` — a fused multiply-add that computes `a*b + accumulator` for 8 floats in a single CPU cycle. After the main loop, a horizontal reduction sums the 8 partial results into one scalar. Any leftover elements that don't fill a full SIMD register are handled by a scalar tail loop. This demonstrates the 4–8× throughput gain that SIMD provides on data-parallel workloads.
 
 ```cpp
 #include <immintrin.h>
@@ -298,6 +310,8 @@ int main() {
 
 ### 4. Data-Oriented Design — ECS Pattern
 
+This is a minimal Entity-Component-System (ECS) implementation using SoA layout. Instead of objects with methods (OOP), entities are just indices, and components (positions, velocities) are stored in separate contiguous arrays. The `movement_system` function iterates over all positions and velocities in a tight loop — this is extremely cache-friendly because the CPU prefetches the next elements automatically. Game engines like Unity DOTS and Bevy use this pattern to update millions of entities at 60+ FPS.
+
 ```cpp
 #include <vector>
 #include <cstdio>
@@ -325,6 +339,8 @@ int main() {
 ```
 
 ### 5. Google Benchmark — Micro-Benchmarking
+
+This uses the Google Benchmark library to rigorously measure two ways of summing a vector: a hand-written `for` loop vs. `std::accumulate`. The `benchmark::DoNotOptimize` call is critical — without it, the compiler would see that `sum` is never used for output and would eliminate the entire computation. The `Range(1<<10, 1<<20)` call runs the benchmark at multiple input sizes (1K to 1M elements) so you can see how performance scales and where cache effects kick in.
 
 ```cpp
 // Compile: g++ -O2 -std=c++17 bench.cpp -lbenchmark -lpthread -o bench
@@ -372,6 +388,8 @@ BENCHMARK_MAIN();
 
 ### PGO Workflow
 
+These three shell commands demonstrate Profile-Guided Optimization, a two-pass compilation technique. First, the compiler instruments the binary to record which branches are taken and how often each function is called during a real run. Then you execute the instrumented binary with typical input data. Finally, you recompile using that recorded profile — the compiler now knows the hot paths and can optimize branch layout, inlining decisions, and code placement accordingly.
+
 ```bash
 # Step 1: Instrument
 g++ -O2 -fprofile-generate -o app_instr main.cpp
@@ -410,6 +428,8 @@ Extend the ECS example with archetype-based storage (entities with identical com
 
 ### 🟢 Cache Line Measurement
 
+This program uses pointer chasing to measure memory access latency at different working-set sizes. It creates a shuffled array where each element points to another random index, then follows the chain millions of times. When the array fits in L1 cache (~32 KB), each access takes ~1 ns. As the array exceeds L2 and L3 sizes, latency jumps to ~4 ns and ~12 ns respectively, revealing the cache boundaries.
+
 ```cpp
 #include <cstdio>
 #include <chrono>
@@ -439,6 +459,8 @@ int main() {
 ```
 
 ### 🟡 Branchless Min/Max
+
+This implements `min` and `max` without any `if` statements or ternary operators, using only subtraction and arithmetic right-shift. The key insight: `(a - b) >> 31` produces -1 (all bits set) when `a < b`, or 0 otherwise. This bitmask selects the correct value through bitwise AND, avoiding a branch instruction entirely. On random data where the CPU can't predict which value is larger, this avoids the ~15-cycle misprediction penalty.
 
 ```cpp
 #include <cstdio>

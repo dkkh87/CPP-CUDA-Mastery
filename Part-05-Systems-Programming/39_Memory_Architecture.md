@@ -340,6 +340,8 @@ on that node using `numa_alloc_onnode`. Use with `std::vector`.
 
 ### 🟢 Cache Line Size Detection
 
+This program walks through a large array using increasing stride sizes (1, 2, 4, … 256 bytes) and measures how long each traversal takes. When the stride is smaller than or equal to the cache line size (64 bytes on x86), each step still touches the same cache line, so access time stays roughly flat. Once the stride exceeds 64 bytes, each step hits a new cache line, and the time drops because fewer total accesses occur. This "knee" in the timing data reveals the hardware's cache line size without any special OS or CPU queries.
+
 ```cpp
 // file: cache_line_detect.cpp
 // compile: g++ -O2 -std=c++17 -o cache_line_detect cache_line_detect.cpp
@@ -369,6 +371,8 @@ int main() {
 ```
 
 ### 🟡 4-Thread False Sharing with perf
+
+This program spawns four threads that each increment their own counter in a shared array. When compiled without `-DPADDED`, all four counters sit on the same or adjacent cache lines, so the CPU's cache coherence protocol constantly bounces those lines between cores — this is false sharing. When compiled with `-DPADDED`, each counter is aligned to its own 64-byte cache line, eliminating the contention. Running both versions under `perf stat` lets you see the dramatic difference in cache-miss counts.
 
 ```cpp
 // file: false_sharing_4t.cpp
@@ -411,6 +415,8 @@ int main() {
 Compile twice: without `-DPADDED` and with `-DPADDED`, then compare `perf stat` output.
 
 ### 🔴 NUMA-Aware Allocator
+
+This implements a custom C++ allocator that forces memory allocation onto a specific NUMA node using `numa_alloc_onnode`. By conforming to the standard allocator interface (`allocate` / `deallocate`), it plugs directly into `std::vector` and other STL containers. This is how systems programmers ensure that data lives in the memory bank closest to the CPU core that will process it, avoiding the 1.5–2× latency penalty of cross-socket access on multi-socket servers.
 
 ```cpp
 // file: numa_allocator.cpp
