@@ -473,9 +473,7 @@ public:
         validators_ = {validate_quantity, validate_price, validate_symbol};
     }
 
-    void add_listener(std::shared_ptr<OrderListener> listener) {
-        listeners_.push_back(listener);
-    }
+    void add_listener(std::shared_ptr<OrderListener> listener) { listeners_.push_back(listener); }
 
     // --- Create order ---
     Expected<std::shared_ptr<Order>, ValidationError>
