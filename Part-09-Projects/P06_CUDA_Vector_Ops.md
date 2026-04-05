@@ -2,8 +2,6 @@
 
 > **Difficulty:** 🟢 Beginner · **Time:** 3–4 hours · **Lines of code:** ~200 CUDA/C++
 
----
-
 ## Prerequisites
 
 | Topic | Why You Need It |
@@ -14,8 +12,6 @@
 | Understanding of CPU vs GPU hardware (Part-07) | Knowing *why* thousands of cores help with data-parallel work |
 
 > **Tooling:** NVIDIA GPU (Compute Capability ≥ 3.5), CUDA Toolkit ≥ 11.0, `nvcc` on your `PATH`.
-
----
 
 ## Learning Objectives
 
@@ -28,8 +24,6 @@ By the end of this project you will be able to:
 5. Implement vector **addition**, **subtraction**, **scalar multiply**, and **dot product** as GPU kernels.
 6. Measure kernel execution time with CUDA Events and compare against a CPU baseline.
 7. Use a defensive error-checking macro so bugs surface immediately.
-
----
 
 ## Architecture — Host ↔ Device Data Flow
 
@@ -62,9 +56,7 @@ flowchart LR
 ```
 
 **Key insight:** The GPU cannot touch host RAM and the CPU cannot touch device RAM.
-`cudaMemcpy` is the *only* bridge between the two memory spaces.
-
----
+`cudaMemcpy` is the *only* bridge.
 
 ## Step-by-Step Implementation
 
@@ -79,8 +71,8 @@ cuda_vector_ops/
 ### Step 1 — Error-Checking Macro
 
 CUDA functions return `cudaError_t`. Silently ignoring errors is the #1 cause of
-mysterious "it runs but produces garbage" bugs. We define a macro that checks
-every call and aborts with a human-readable message on failure.
+mysterious bugs. We define a macro that checks every call and aborts with a
+human-readable message on failure.
 
 ```cuda
 // ============================================================
@@ -114,11 +106,10 @@ every call and aborts with a human-readable message on failure.
 
 ### Step 2 — GPU Kernels
 
-Each kernel is a function prefixed with `__global__`, meaning the CPU *calls* it
-but it *runs* on the GPU. Every thread gets a unique index via
-`blockIdx.x * blockDim.x + threadIdx.x`. We guard against out-of-bounds access
-because the total number of threads is typically rounded up to a multiple of the
-block size.
+Each kernel is a `__global__` function — called by the CPU, runs on the GPU.
+Every thread gets a unique index via `blockIdx.x * blockDim.x + threadIdx.x`.
+We guard against out-of-bounds access because total threads is rounded up to a
+multiple of block size.
 
 ```cuda
 // -----------------------------------------------------------
@@ -186,15 +177,14 @@ __global__ void vec_dot_partial(const float *a, const float *b,
 }
 ```
 
-> **Shared memory** (`__shared__`) lives on-chip in each Streaming Multiprocessor.
-> It is orders of magnitude faster than global (VRAM) memory but is limited to
-> ~48 KB per block. We request it dynamically with the `extern __shared__` syntax
-> and pass the size as the third kernel-launch parameter.
+> **Shared memory** (`__shared__`) lives on-chip, orders of magnitude faster
+> than global memory but limited to ~48 KB/block. We use `extern __shared__`
+> to request it dynamically via the third kernel-launch parameter.
 
 ### Step 3 — CPU Reference Implementations
 
 We need these to *verify* the GPU output. Never trust a kernel until you have
-compared its results against a known-good CPU version.
+compared it against a CPU reference.
 
 ```cuda
 // -----------------------------------------------------------
@@ -249,9 +239,8 @@ bool arrays_match(const float *ref, const float *test, int n, float eps = 1e-5f)
 
 ### Step 5 — Timing Wrapper with CUDA Events
 
-CPU timers (`clock()`, `std::chrono`) measure wall-clock time and include
-driver overhead. **CUDA Events** are inserted directly into the GPU command
-stream and measure *only* kernel execution time, giving far more accurate results.
+CPU timers include driver overhead. **CUDA Events** are inserted into the GPU
+command stream and measure *only* kernel execution time.
 
 ```cuda
 // -----------------------------------------------------------
@@ -424,7 +413,7 @@ nvcc -O2 -arch=sm_70 -o vector_ops vector_ops.cu
 ./vector_ops
 ```
 
-Expected output (times will vary by GPU):
+Expected output (times vary by GPU):
 
 ```text
 Vector size : 16777216 elements (67.1 MB per vector)
@@ -432,22 +421,16 @@ Grid        : 65536 blocks × 256 threads
 
 --- Vector Addition ---
   GPU: 0.842 ms  |  PASS ✅
-
 --- Vector Subtraction ---
   GPU: 0.836 ms  |  PASS ✅
-
 --- Scalar Multiply (×2.5) ---
   GPU: 0.531 ms  |  PASS ✅
-
 --- Dot Product ---
   CPU dot : 4194782.500000
   GPU dot : 4194782.000000  (rel error: 1.19e-07)
   GPU: 1.247 ms  |  PASS ✅
-
 All operations complete. Device memory freed.
 ```
-
----
 
 ## Testing Strategy
 
@@ -464,27 +447,20 @@ All operations complete. Device memory freed.
 ### Stress Tests
 
 ```bash
-# Run under compute-sanitizer to detect out-of-bounds memory access
+# Detect out-of-bounds memory access
 compute-sanitizer ./vector_ops
-
-# Run under cuda-memcheck (older toolkit versions)
-cuda-memcheck ./vector_ops
 ```
-
----
 
 ## Performance Analysis
 
 ### CPU vs GPU Comparison (16M elements, float32)
 
-| Operation | CPU (single core) | GPU (RTX 3080) | Speedup |
-|-----------|-------------------|----------------|---------|
+| Operation | CPU (1 core) | GPU (RTX 3080) | Speedup |
+|-----------|-------------|----------------|---------|
 | Vec Add | 28.4 ms | 0.84 ms | **33.8×** |
 | Vec Sub | 28.1 ms | 0.84 ms | **33.5×** |
 | Scalar Mul | 18.7 ms | 0.53 ms | **35.3×** |
 | Dot Product | 35.2 ms | 1.25 ms | **28.2×** |
-
-> *CPU measured with `std::chrono::high_resolution_clock`, single thread, `-O2`.*
 
 ### Why the GPU Wins
 
@@ -492,8 +468,6 @@ These kernels are **memory-bound** — they do very little arithmetic per byte
 loaded (e.g. vec_add: 1 FLOP per 8 bytes = 0.125 FLOP/B). The GPU's massive
 memory bandwidth (~760 GB/s on RTX 3080 vs ~51 GB/s DDR4) is the dominant
 advantage, not raw FLOP count.
-
----
 
 ## Extensions & Challenges
 
@@ -515,20 +489,16 @@ advantage, not raw FLOP count.
 8. **Warp-level reduction** — replace shared-memory tree reduction with `__shfl_down_sync`. Benchmark the difference.
 9. **Multi-GPU** — split vectors across two GPUs with `cudaSetDevice`, compute partial results, combine.
 
----
-
 ## Key Takeaways
 
 | # | Takeaway |
 |---|----------|
-| 1 | **Every CUDA program follows three phases:** allocate & upload → launch kernel → download & free. Master this pattern and every future project is a variation of it. |
+| 1 | **Every CUDA program follows three phases:** allocate & upload → launch kernel → download & free. |
 | 2 | **Always check errors.** The `CUDA_CHECK` macro costs nothing at runtime and saves hours of debugging. |
-| 3 | **Grid sizing formula:** `gridDim = (N + blockDim - 1) / blockDim` guarantees enough threads, and the `if (idx < n)` guard keeps extra threads safe. |
-| 4 | **Shared memory enables fast intra-block communication.** The dot-product reduction could not be written efficiently without it. |
-| 5 | **These kernels are memory-bound.** The GPU wins not because of faster math, but because of 10–15× higher memory bandwidth than the CPU. |
-| 6 | **CUDA Events give accurate GPU timing.** CPU wall-clock timers include driver overhead and are unreliable for kernel benchmarking. |
-| 7 | **Verify every kernel against a CPU reference.** Silent wrong results are worse than crashes — always compare before celebrating speedups. |
-
----
+| 3 | **Grid sizing:** `gridDim = (N + blockDim - 1) / blockDim` with an `if (idx < n)` guard. |
+| 4 | **Shared memory enables fast intra-block communication** — essential for reductions like dot product. |
+| 5 | **These kernels are memory-bound.** The GPU wins via 10–15× higher memory bandwidth, not faster math. |
+| 6 | **CUDA Events give accurate GPU timing.** CPU timers include driver overhead. |
+| 7 | **Verify every kernel against a CPU reference.** Silent wrong results are worse than crashes. |
 
 *Next project → [P07: Matrix Multiply & Tiling](P07_Matrix_Multiply_Tiling.md) — we move from 1-D vectors to 2-D grids and learn how shared-memory tiling turns a memory-bound kernel into a compute-bound one.*
