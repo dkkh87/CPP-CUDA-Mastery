@@ -471,6 +471,8 @@ int main() {
 }
 ```
 
+### Compile and run
+
 ```bash
 nvcc -O2 -o reduction_cub reduction_cub.cu
 ./reduction_cub

@@ -69,6 +69,8 @@ int main() {
 }
 ```
 
+### Compile and run
+
 ```bash
 nvcc -o check_overlap check_overlap.cu
 ./check_overlap
