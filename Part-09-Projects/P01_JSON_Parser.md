@@ -3,7 +3,6 @@
 > **Difficulty:** 🟢 Beginner &nbsp;|&nbsp; **Time:** 4–6 hours &nbsp;|&nbsp; **Standard:** C++17
 
 ---
-
 ## Prerequisites
 
 | Topic | Why You Need It |
@@ -13,7 +12,6 @@
 | Recursion | JSON is a recursive data structure |
 | Move semantics | Efficient construction of nested containers |
 | `std::map` / `std::vector` | Backing stores for objects and arrays |
-
 ## Learning Objectives
 
 After completing this project you will be able to:
@@ -25,7 +23,6 @@ After completing this project you will be able to:
 5. Write **unit tests** that cover every JSON production rule.
 
 ---
-
 ## Architecture
 
 ```mermaid
@@ -34,24 +31,14 @@ flowchart LR
     B --> C["Token Stream\nstd::vector&lt;Token&gt;"]
     C --> D["Recursive-Descent\nParser"]
     D --> E["JSON Value Tree\n(std::variant)"]
-
     subgraph "Error Reporting"
         B -- "unexpected char" --> F["Error\nline:col message"]
         D -- "unexpected token" --> F
     end
-
-    style A fill:#2d333b,stroke:#8b949e,color:#e6edf3
-    style B fill:#1f6feb,stroke:#58a6ff,color:#fff
-    style C fill:#2d333b,stroke:#8b949e,color:#e6edf3
-    style D fill:#1f6feb,stroke:#58a6ff,color:#fff
-    style E fill:#238636,stroke:#3fb950,color:#fff
-    style F fill:#da3633,stroke:#f85149,color:#fff
 ```
 
 ---
-
 ## Implementation
-
 ### Step 1 — The JSON Value Type
 
 ```cpp
@@ -100,32 +87,19 @@ struct JsonValue {
     const JsonObject& as_object() const { return std::get<JsonObject>(data); }
 };
 ```
-
 ### Step 2 — Tokens and the Lexer
 
-The lexer converts the source text into a flat list of tokens.
-Each token remembers its position so the parser can report errors precisely.
-
 ```cpp
-// ---- Token -----------------------------------------------------------------
-
 enum class TokenType {
-    LeftBrace, RightBrace,   // { }
-    LeftBracket, RightBracket, // [ ]
-    Colon, Comma,
-    String, Number,
-    True, False, Null,
-    Eof
+    LeftBrace, RightBrace, LeftBracket, RightBracket,
+    Colon, Comma, String, Number, True, False, Null, Eof
 };
 
 struct Token {
     TokenType   type;
-    std::string_view text;   // zero-copy slice of source
-    int line;
-    int col;
+    std::string_view text;
+    int line, col;
 };
-
-// ---- Lexer -----------------------------------------------------------------
 
 class Lexer {
 public:
@@ -227,15 +201,9 @@ private:
     }
 };
 ```
-
 ### Step 3 — The Recursive-Descent Parser
 
-Each grammar rule maps to exactly one function. The parser never backtracks;
-the next token always tells us which production to enter.
-
 ```cpp
-// ---- Parser ----------------------------------------------------------------
-
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens)
@@ -250,11 +218,8 @@ public:
 private:
     std::vector<Token> tokens_;
     size_t pos_;
-
     const Token& current() const { return tokens_[pos_]; }
-
     const Token& consume() { return tokens_[pos_++]; }
-
     bool match(TokenType tt) const { return current().type == tt; }
 
     const Token& expect(TokenType tt, const char* msg) {
@@ -268,10 +233,9 @@ private:
         return consume();
     }
 
-    // Unescape a JSON string token (strip quotes, process escape sequences)
+    // Unescape a JSON string token (strip quotes, process escapes)
     std::string unescape(std::string_view raw) {
         std::string out;
-        // raw includes surrounding quotes — skip them
         size_t i = 1, end = raw.size() - 1;
         out.reserve(end - 1);
         while (i < end) {
@@ -319,8 +283,6 @@ private:
         return out;
     }
 
-    // ---- Grammar rules (one function per production) -----------------------
-
     JsonValue parse_value() {
         switch (current().type) {
             case TokenType::Null:         return parse_null();
@@ -340,24 +302,10 @@ private:
         }
     }
 
-    JsonValue parse_null()   { consume(); return JsonValue{nullptr}; }
-
-    JsonValue parse_bool() {
-        bool val = current().type == TokenType::True;
-        consume();
-        return JsonValue{val};
-    }
-
-    JsonValue parse_number() {
-        auto& tok = consume();
-        double val = std::stod(std::string(tok.text));
-        return JsonValue{val};
-    }
-
-    JsonValue parse_string() {
-        auto& tok = consume();
-        return JsonValue{unescape(tok.text)};
-    }
+    JsonValue parse_null() { consume(); return JsonValue{nullptr}; }
+    JsonValue parse_bool() { bool v = current().type == TokenType::True; consume(); return JsonValue{v}; }
+    JsonValue parse_number() { auto& t = consume(); return JsonValue{std::stod(std::string(t.text))}; }
+    JsonValue parse_string() { auto& t = consume(); return JsonValue{unescape(t.text)}; }
 
     JsonValue parse_array() {
         expect(TokenType::LeftBracket, "Expected '['");
@@ -395,8 +343,6 @@ private:
     }
 };
 
-// ---- Public API ------------------------------------------------------------
-
 inline JsonValue parse(std::string_view source) {
     Lexer lexer(source);
     auto tokens = lexer.tokenize();
@@ -406,8 +352,7 @@ inline JsonValue parse(std::string_view source) {
 
 } // namespace json
 ```
-
-### Step 4 — Putting It All Together
+### Step 4 — Demo and Tests
 
 ```cpp
 // main.cpp
@@ -416,53 +361,13 @@ inline JsonValue parse(std::string_view source) {
 #include <cmath>
 #include <iostream>
 
-// Pretty-print a JsonValue (for demonstration)
-void print(const json::JsonValue& v, int indent = 0) {
-    auto pad = [](int n) { return std::string(n * 2, ' '); };
-
-    std::visit([&](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, std::nullptr_t>) {
-            std::cout << "null";
-        } else if constexpr (std::is_same_v<T, bool>) {
-            std::cout << (arg ? "true" : "false");
-        } else if constexpr (std::is_same_v<T, double>) {
-            std::cout << arg;
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            std::cout << '"' << arg << '"';
-        } else if constexpr (std::is_same_v<T, json::JsonArray>) {
-            std::cout << "[\n";
-            for (size_t i = 0; i < arg.size(); ++i) {
-                std::cout << pad(indent + 1);
-                print(arg[i], indent + 1);
-                if (i + 1 < arg.size()) std::cout << ",";
-                std::cout << "\n";
-            }
-            std::cout << pad(indent) << "]";
-        } else if constexpr (std::is_same_v<T, json::JsonObject>) {
-            std::cout << "{\n";
-            size_t i = 0;
-            for (auto& [k, val] : arg) {
-                std::cout << pad(indent + 1) << '"' << k << "\": ";
-                print(val, indent + 1);
-                if (++i < arg.size()) std::cout << ",";
-                std::cout << "\n";
-            }
-            std::cout << pad(indent) << "}";
-        }
-    }, v.data);
-}
-
 int main() {
     // ---- Functional demo ---------------------------------------------------
     constexpr std::string_view sample = R"({
         "name": "JSON Parser",
         "version": 1.0,
         "keywords": ["C++17", "variant", "recursive-descent"],
-        "author": {
-            "handle": "dev",
-            "active": true
-        },
+        "author": { "handle": "dev", "active": true },
         "license": null,
         "stars": 42,
         "nested": { "a": [1, 2, {"b": false}] }
@@ -470,137 +375,82 @@ int main() {
 
     try {
         auto root = json::parse(sample);
-        print(root);
-        std::cout << "\n\n";
+        auto& obj = root.as_object();
+        std::cout << "Parsed " << obj.size() << " top-level keys\n";
+        std::cout << "name = " << obj.at("name").as_string() << "\n";
+        std::cout << "stars = " << obj.at("stars").as_number() << "\n\n";
     } catch (const std::runtime_error& e) {
         std::cerr << e.what() << "\n";
         return 1;
     }
 
     // ---- Unit-test suite ---------------------------------------------------
-    auto run_tests = []() {
-        int passed = 0, failed = 0;
-        auto CHECK = [&](bool cond, const char* label) {
-            if (cond) { ++passed; }
-            else { ++failed; std::cerr << "FAIL: " << label << "\n"; }
-        };
-
-        // 1. Null
-        { auto v = json::parse("null");
-          CHECK(v.is_null(), "null"); }
-
-        // 2. Booleans
-        { auto v = json::parse("true");
-          CHECK(v.is_bool() && v.as_bool() == true, "true"); }
-        { auto v = json::parse("false");
-          CHECK(v.is_bool() && v.as_bool() == false, "false"); }
-
-        // 3. Numbers
-        { auto v = json::parse("42");
-          CHECK(v.is_number() && v.as_number() == 42.0, "integer"); }
-        { auto v = json::parse("-3.14");
-          CHECK(v.is_number() && std::abs(v.as_number() + 3.14) < 1e-9,
-                "negative float"); }
-        { auto v = json::parse("1e10");
-          CHECK(v.is_number() && v.as_number() == 1e10, "scientific"); }
-        { auto v = json::parse("2.5E-3");
-          CHECK(v.is_number() && std::abs(v.as_number() - 0.0025) < 1e-12,
-                "scientific neg exp"); }
-
-        // 4. Strings
-        { auto v = json::parse(R"("hello")");
-          CHECK(v.is_string() && v.as_string() == "hello", "simple string"); }
-        { auto v = json::parse(R"("line\nbreak")");
-          CHECK(v.is_string() && v.as_string() == "line\nbreak",
-                "escaped newline"); }
-        { auto v = json::parse(R"("tab\there")");
-          CHECK(v.is_string() && v.as_string() == "tab\there",
-                "escaped tab"); }
-        { auto v = json::parse(R"("quote\"inside")");
-          CHECK(v.is_string() && v.as_string() == "quote\"inside",
-                "escaped quote"); }
-        { auto v = json::parse(R"("\u0041\u0042")");
-          CHECK(v.is_string() && v.as_string() == "AB",
-                "unicode escape BMP"); }
-
-        // 5. Arrays
-        { auto v = json::parse("[]");
-          CHECK(v.is_array() && v.as_array().empty(), "empty array"); }
-        { auto v = json::parse("[1, 2, 3]");
-          auto& a = v.as_array();
-          CHECK(a.size() == 3 && a[0].as_number() == 1, "int array"); }
-        { auto v = json::parse(R"([true, null, "x"])");
-          auto& a = v.as_array();
-          CHECK(a.size() == 3 && a[0].as_bool() && a[1].is_null()
-                && a[2].as_string() == "x", "mixed array"); }
-        { auto v = json::parse("[[1],[2,[3]]]");
-          CHECK(v.as_array().size() == 2, "nested arrays"); }
-
-        // 6. Objects
-        { auto v = json::parse("{}");
-          CHECK(v.is_object() && v.as_object().empty(), "empty object"); }
-        { auto v = json::parse(R"({"a": 1, "b": "two"})");
-          auto& o = v.as_object();
-          CHECK(o.size() == 2 && o.at("a").as_number() == 1
-                && o.at("b").as_string() == "two", "simple object"); }
-        { auto v = json::parse(R"({"x": {"y": [1, 2]}})");
-          CHECK(v.as_object().at("x").as_object().at("y")
-                    .as_array()[1].as_number() == 2, "nested object"); }
-
-        // 7. Whitespace tolerance
-        { auto v = json::parse("  \n\t { \n \"k\" \t : \r\n 1 } ");
-          CHECK(v.is_object(), "whitespace tolerance"); }
-
-        // 8. Error reporting
-        { bool caught = false;
-          try { json::parse("{missing"); }
-          catch (const std::runtime_error& e) {
-              std::string msg = e.what();
-              caught = msg.find("1:") != std::string::npos;
-          }
-          CHECK(caught, "error includes line:col"); }
-
-        { bool caught = false;
-          try { json::parse("[1, 2,]"); }
-          catch (const std::runtime_error&) { caught = true; }
-          CHECK(caught, "trailing comma rejected"); }
-
-        std::cout << "Tests: " << passed << " passed, "
-                  << failed << " failed\n";
-        return failed == 0;
+    int passed = 0, failed = 0;
+    auto CHECK = [&](bool cond, const char* label) {
+        if (cond) { ++passed; }
+        else { ++failed; std::cerr << "FAIL: " << label << "\n"; }
     };
 
-    bool ok = run_tests();
-    return ok ? 0 : 1;
+    // Atoms
+    CHECK(json::parse("null").is_null(), "null");
+    CHECK(json::parse("true").as_bool() == true, "true");
+    CHECK(json::parse("false").as_bool() == false, "false");
+
+    // Numbers
+    CHECK(json::parse("42").as_number() == 42.0, "integer");
+    CHECK(std::abs(json::parse("-3.14").as_number() + 3.14) < 1e-9, "negative float");
+    CHECK(json::parse("1e10").as_number() == 1e10, "scientific");
+    CHECK(std::abs(json::parse("2.5E-3").as_number() - 0.0025) < 1e-12, "sci neg exp");
+
+    // Strings
+    CHECK(json::parse(R"("hello")").as_string() == "hello", "simple string");
+    CHECK(json::parse(R"("line\nbreak")").as_string() == "line\nbreak", "escaped newline");
+    CHECK(json::parse(R"("tab\there")").as_string() == "tab\there", "escaped tab");
+    CHECK(json::parse(R"("quote\"inside")").as_string() == "quote\"inside", "escaped quote");
+    CHECK(json::parse(R"("\u0041\u0042")").as_string() == "AB", "unicode BMP");
+
+    // Arrays
+    CHECK(json::parse("[]").as_array().empty(), "empty array");
+    { auto v = json::parse("[1, 2, 3]");
+      CHECK(v.as_array().size() == 3 && v.as_array()[0].as_number() == 1, "int array"); }
+    { auto v = json::parse(R"([true, null, "x"])");
+      auto& a = v.as_array();
+      CHECK(a[0].as_bool() && a[1].is_null() && a[2].as_string() == "x", "mixed array"); }
+    CHECK(json::parse("[[1],[2,[3]]]").as_array().size() == 2, "nested arrays");
+
+    // Objects
+    CHECK(json::parse("{}").as_object().empty(), "empty object");
+    { auto v = json::parse(R"({"a": 1, "b": "two"})");
+      auto& o = v.as_object();
+      CHECK(o.at("a").as_number() == 1 && o.at("b").as_string() == "two", "simple object"); }
+    { auto v = json::parse(R"({"x": {"y": [1, 2]}})");
+      CHECK(v.as_object().at("x").as_object().at("y").as_array()[1].as_number() == 2,
+            "nested object"); }
+
+    // Whitespace
+    CHECK(json::parse("  \n\t { \n \"k\" \t : \r\n 1 } ").is_object(), "whitespace");
+
+    // Error reporting
+    { bool caught = false;
+      try { json::parse("{missing"); }
+      catch (const std::runtime_error& e) {
+          caught = std::string(e.what()).find("1:") != std::string::npos;
+      }
+      CHECK(caught, "error has line:col"); }
+    { bool caught = false;
+      try { json::parse("[1, 2,]"); }
+      catch (const std::runtime_error&) { caught = true; }
+      CHECK(caught, "trailing comma rejected"); }
+
+    std::cout << "Tests: " << passed << " passed, " << failed << " failed\n";
+    return failed == 0 ? 0 : 1;
 }
 ```
-
 ### Building and Running
 
 ```bash
-# Compile (any C++17 compiler)
-g++ -std=c++17 -O2 -Wall -Wextra -o json_parser main.cpp
-
-# Run
-./json_parser
+g++ -std=c++17 -O2 -Wall -Wextra -o json_parser main.cpp && ./json_parser
 ```
-
-Expected output:
-
-```
-{
-  "author": {
-    "active": true,
-    "handle": "dev"
-  },
-  ...
-}
-
-Tests: 20 passed, 0 failed
-```
-
----
-
 ## Testing Strategy
 
 | Category | What to Test | Example Input |
@@ -612,15 +462,9 @@ Tests: 20 passed, 0 failed
 | **Objects** | empty, nested, many keys | `"{}"`, `"{\"a\":{\"b\":1}}"` |
 | **Errors** | unterminated string, trailing comma, bare word | `"[1,]"`, `"{bad"` |
 | **Whitespace** | tabs, newlines, carriage returns between tokens | `"  { } "` |
+### Edge Cases
 
-### Edge Cases to Watch
-
-- Leading zeros in numbers (`01` is illegal in JSON).
-- Surrogate pairs in `\uXXXX` sequences (our BMP-only handler is explicitly simplified).
-- Deeply nested structures that could overflow the call stack.
-
----
-
+Leading zeros (`01` is illegal JSON), surrogate pairs in `\uXXXX`, and deeply nested structures that overflow the call stack.
 ## Performance Analysis
 
 | Aspect | Our Approach | Tradeoff |
@@ -631,46 +475,22 @@ Tests: 20 passed, 0 failed
 | **Numbers** | Delegates to `std::stod` | Correct but not the fastest; a hand-rolled parser avoids the `std::string` temp |
 | **Memory** | `std::map` for objects | Ordered keys; `unordered_map` would be faster for lookups |
 
-**Rough throughput on a modern laptop:** 150–250 MB/s for well-formed JSON
-(dominated by string copies into the value tree).
-
-### Where to Optimize
-
-1. **Arena allocator** — pool-allocate `JsonValue` nodes to reduce `new`/`delete` churn.
-2. **SIMD whitespace skip** — use SSE4.2 `_mm_cmpistri` to skip whitespace in bulk.
-3. **`strtod` replacement** — a hand-rolled fast-path double parser avoids the locale-aware overhead.
-4. **`std::unordered_map`** — swap `std::map` for O(1) average key lookups.
-
----
-
+**Optimization opportunities:** arena allocator for nodes, SIMD whitespace skipping (`_mm_cmpistri`), hand-rolled `strtod`, swap `std::map` for `std::unordered_map`.
 ## Extensions & Challenges
 
 | # | Challenge | Difficulty |
 |---|---|---|
-| 1 | **JSON serializer** — write a `to_string(JsonValue)` that round-trips | 🟢 Easy |
-| 2 | **JSONPath queries** — implement `$.store.book[0].title` style access | 🟡 Medium |
-| 3 | **Streaming parser** — parse from `std::istream` without loading the entire file | 🟡 Medium |
-| 4 | **Full Unicode** — handle surrogate pairs and validate UTF-8 byte sequences | 🟡 Medium |
-| 5 | **JSON Patch (RFC 6902)** — implement add/remove/replace/move/copy/test ops | 🔴 Hard |
-| 6 | **SIMD lexer** — use SIMD intrinsics to scan for structural characters | 🔴 Hard |
-| 7 | **Conformance suite** — pass the [JSONTestSuite](https://github.com/nst/JSONTestSuite) | 🟡 Medium |
-
----
-
+| 1 | **JSON serializer** — `to_string(JsonValue)` that round-trips | 🟢 Easy |
+| 2 | **JSONPath queries** — `$.store.book[0].title` access | 🟡 Medium |
+| 3 | **Streaming parser** — parse from `std::istream` | 🟡 Medium |
+| 4 | **Full Unicode** — surrogate pairs + UTF-8 validation | 🟡 Medium |
+| 5 | **JSON Patch (RFC 6902)** — add/remove/replace/move/copy/test | 🔴 Hard |
+| 6 | **SIMD lexer** — SIMD intrinsics for structural char scanning | 🔴 Hard |
+| 7 | **Conformance suite** — pass [JSONTestSuite](https://github.com/nst/JSONTestSuite) | 🟡 Medium |
 ## Key Takeaways
 
-1. **`std::variant` is a natural fit for ASTs.** It replaces class hierarchies and
-   virtual dispatch with a closed, stack-friendly tagged union.
-
-2. **`std::string_view` lets the lexer work without copying.** Tokens are just
-   windows into the original buffer — allocations happen only when you build
-   the final value tree.
-
-3. **Recursive descent mirrors the grammar.** Each BNF production becomes one
-   function; the code almost reads like the spec itself.
-
-4. **Good error reporting is a first-class concern.** Tracking line and column
-   during lexing costs almost nothing but makes debugging dramatically easier.
-
-5. **Separate lexing from parsing.** A two-stage pipeline (lexer → parser) keeps
-   each stage simple, testable, and independently optimisable.
+1. **`std::variant` is a natural fit for ASTs** — replaces class hierarchies with a stack-friendly tagged union.
+2. **`std::string_view` enables zero-copy lexing** — tokens are windows into the source buffer.
+3. **Recursive descent mirrors the grammar** — each BNF production becomes one function.
+4. **Error reporting is a first-class concern** — line/column tracking costs almost nothing.
+5. **Separate lexing from parsing** — a two-stage pipeline keeps each stage simple and testable.
