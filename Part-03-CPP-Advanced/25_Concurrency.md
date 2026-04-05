@@ -22,6 +22,8 @@ The C++11 standard introduced a portable threading model directly into the langu
 
 ## 1. `std::thread` — Creating, Joining, Detaching
 
+This example shows the three basic thread operations: creating a thread with a function and arguments, joining it (blocking until it finishes), and detaching it (letting it run independently). Arguments are copied into the thread by default, so passing by reference requires `std::ref`. Always call `join()` or `detach()` before the thread object is destroyed, or the program will terminate.
+
 ```cpp
 #include <iostream>
 #include <thread>
@@ -54,6 +56,8 @@ int main() {
 
 ### Thread with Move Semantics
 
+Since `std::thread` is move-only (it cannot be copied), you can store threads in a `std::vector` by using `emplace_back` or `std::move`. This pattern is useful when you need to launch a dynamic number of worker threads and join them all later.
+
 ```cpp
 #include <thread>
 #include <iostream>
@@ -76,6 +80,8 @@ int main() {
 ## 2. Mutexes and Locks
 
 ### `std::mutex` and `std::lock_guard`
+
+This demonstrates protecting shared data with a mutex. `std::lock_guard` is an RAII wrapper that locks the mutex on construction and automatically unlocks it when the scope ends, even if an exception is thrown. Without this protection, multiple threads incrementing the same counter would cause a data race and unpredictable results.
 
 ```cpp
 #include <iostream>
@@ -105,6 +111,8 @@ int main() {
 
 ### `std::unique_lock` — Flexible Locking
 
+Unlike `lock_guard`, `unique_lock` lets you manually unlock and re-lock the mutex within the same scope. This is essential when you need to release the lock during a non-critical section (to reduce contention) and re-acquire it later. It is also the only lock type accepted by `std::condition_variable::wait()`.
+
 ```cpp
 #include <mutex>
 #include <thread>
@@ -124,6 +132,8 @@ void flexible_work() {
 
 ### `std::scoped_lock` (C++17) — Deadlock-Free Multi-Lock
 
+When you need to lock two or more mutexes at once, `std::scoped_lock` acquires them all atomically using a deadlock-avoidance algorithm. This eliminates the classic deadlock caused by different threads locking the same mutexes in different orders.
+
 ```cpp
 #include <mutex>
 #include <thread>
@@ -142,6 +152,8 @@ void transfer() {
 ---
 
 ## 3. `std::condition_variable` — Producer-Consumer
+
+This implements the classic producer-consumer pattern. The producer pushes tasks into a shared queue and calls `notify_one()` to wake a sleeping consumer. Consumers use `cv.wait(lock, predicate)` to efficiently sleep until data is available, which also guards against spurious wakeups. A `done` flag signals consumers to exit when the producer is finished.
 
 ```cpp
 #include <iostream>
@@ -203,6 +215,8 @@ int main() {
 
 ## 4. `std::atomic` — Lock-Free Operations
 
+`std::atomic` provides thread-safe operations on simple types without needing a mutex, making it faster for things like counters and flags. The `fetch_add` operation is a single hardware instruction that atomically reads, increments, and writes. This example also shows `std::atomic_flag` used as a simple spinlock — the most basic synchronization primitive.
+
 ```cpp
 #include <iostream>
 #include <thread>
@@ -250,6 +264,8 @@ int main() {
 
 ### Race Condition Example
 
+This code deliberately shows a data race: two threads increment the same unprotected variable. The `++shared` operation is actually three steps (read, add, write) that can interleave between threads, producing unpredictable results. In C++, this is not just a bug — it is **undefined behavior**.
+
 ```cpp
 #include <thread>
 #include <iostream>
@@ -271,6 +287,8 @@ int main() {
 ```
 
 ### Deadlock Example and Prevention
+
+This shows how deadlock occurs when two threads lock the same pair of mutexes in opposite order — each holds one lock and waits forever for the other. The fix uses `std::scoped_lock`, which acquires both mutexes atomically regardless of call order, making deadlock impossible.
 
 ```cpp
 #include <mutex>
@@ -308,6 +326,8 @@ void thread_b_fixed() {
 
 ## 6. `std::jthread` (C++20) — Auto-Joining & Stop Tokens
 
+`std::jthread` improves on `std::thread` in two ways: it automatically joins in its destructor (so you can never forget), and it passes a `std::stop_token` to the worker function for cooperative cancellation. The worker checks `stoken.stop_requested()` in its loop and exits cleanly when stop is requested — no need for a separate `done` flag.
+
 ```cpp
 #include <iostream>
 #include <thread>
@@ -338,6 +358,8 @@ int main() {
 
 ### Stop Callback
 
+A `std::stop_callback` registers a function that runs automatically when stop is requested on the associated token. This is useful for cleanup actions or logging. The callback fires on the thread that calls `request_stop()`, not the worker thread.
+
 ```cpp
 #include <iostream>
 #include <thread>
@@ -361,6 +383,8 @@ int main() {
 ---
 
 ## 7. Thread-Local Storage
+
+The `thread_local` keyword gives each thread its own independent copy of a variable, so no synchronization is needed. Each thread increments its own private counter to 1000, while the main thread's copy stays at 0. This is useful for per-thread caches, error codes, or scratch buffers.
 
 ```cpp
 #include <iostream>
@@ -463,6 +487,8 @@ flowchart LR
 
 ### Solution 1 — Thread IDs
 
+This solution creates 4 threads using a loop, stores them in a vector, and has each one print its index and unique thread ID. All threads are joined at the end to ensure they complete before the program exits.
+
 ```cpp
 #include <iostream>
 #include <thread>
@@ -481,6 +507,8 @@ int main() {
 ```
 
 ### Solution 3 — Atomic Counter Class
+
+This wraps `std::atomic<int>` in a class with `increment()`, `decrement()`, and `get()` methods. Using `memory_order_relaxed` is safe here because we only need atomicity for a single counter — no ordering guarantees between different variables are required. Eight threads each increment 10,000 times, and the final count is always exactly 80,000.
 
 ```cpp
 #include <iostream>

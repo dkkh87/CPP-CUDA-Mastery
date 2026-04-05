@@ -22,6 +22,8 @@ While Chapter 25 covered raw thread management, real-world concurrent code uses 
 
 ## 1. `std::async` — Launch Policies
 
+`std::async` is the simplest way to run a function concurrently and get its result back via a `std::future`. With `std::launch::async`, the function runs immediately on a new thread. With `std::launch::deferred`, it runs lazily only when you call `.get()`. The default policy lets the implementation decide. Calling `.get()` blocks until the result is ready and returns the value.
+
 ```cpp
 #include <iostream>
 #include <future>
@@ -64,6 +66,8 @@ int main() {
 
 ### Exception Propagation
 
+If an async task throws an exception, it is captured and re-thrown when you call `.get()` on the future. This lets the calling thread handle errors from worker threads using standard try-catch, without needing to pass error codes through shared state.
+
 ```cpp
 #include <future>
 #include <iostream>
@@ -89,6 +93,8 @@ int main() {
 ## 2. `std::future`, `std::promise`, `std::shared_future`
 
 ### Promise-Future Channel
+
+A `std::promise` and `std::future` form a one-shot communication channel between threads. The producer thread calls `set_value()` on the promise, and the consumer thread calls `.get()` on the future to receive it. This decouples the threads — the consumer blocks until the value is ready, without polling or shared variables.
 
 ```cpp
 #include <iostream>
@@ -116,6 +122,8 @@ int main() {
 ```
 
 ### `std::shared_future` — Multiple Consumers
+
+Unlike `std::future` (which can only be read once), `std::shared_future` lets multiple threads each call `.get()` on the same result. Create it by calling `.share()` on a regular future. This is useful when several consumers need the same computed value — all of them block until the producer sets it, then all receive the same result.
 
 ```cpp
 #include <iostream>
@@ -184,6 +192,8 @@ int main() {
 ---
 
 ## 4. Thread Pool Pattern
+
+A thread pool creates a fixed number of worker threads upfront and reuses them for many tasks, avoiding the overhead of creating and destroying threads for each job. Tasks are submitted to a shared queue protected by a mutex and condition variable. Each worker sleeps until a task is available, executes it, then goes back to waiting. The `submit()` method returns a `std::future` so callers can retrieve results.
 
 ```cpp
 #include <iostream>
@@ -268,6 +278,8 @@ int main() {
 
 ## 5. Producer-Consumer with Bounded Buffer
 
+This implements a thread-safe bounded buffer (fixed-capacity queue) using two condition variables: `not_full_` blocks the producer when the buffer is at capacity, and `not_empty_` blocks consumers when the buffer is empty. The `close()` method signals all threads to stop. Using `std::optional` for the return type lets consumers distinguish between a valid item and a "no more data" signal.
+
 ```cpp
 #include <iostream>
 #include <thread>
@@ -341,6 +353,8 @@ int main() {
 
 ## 6. Fork-Join Parallelism
 
+Fork-join divides a large task into halves recursively: the left half is "forked" to a new async thread while the right half runs on the current thread. When both finish, results are "joined" (combined). A threshold stops recursion for small inputs and uses sequential `std::accumulate` instead. This pattern maps naturally to divide-and-conquer algorithms like parallel reduce.
+
 ```cpp
 #include <iostream>
 #include <future>
@@ -383,6 +397,8 @@ int main() {
 ---
 
 ## 7. Parallel Algorithms (C++17)
+
+C++17 lets you parallelize standard algorithms just by adding an execution policy as the first argument. `std::execution::seq` runs sequentially, `par` runs across multiple threads, and `par_unseq` allows both threading and SIMD vectorization. This example compares sequential vs parallel sort on 10 million elements, and demonstrates `std::reduce` and `std::transform_reduce` for parallel aggregation.
 
 ```cpp
 #include <iostream>
@@ -443,6 +459,8 @@ int main() {
 ## 8. Coroutines Preview (C++20)
 
 ### `co_yield` — Generator
+
+This builds a lazy generator using C++20 coroutines. The `Generator<T>` type defines a `promise_type` that the compiler uses to manage coroutine state. Each `co_yield` suspends the coroutine and produces a value; calling `next()` resumes it to produce the next one. The Fibonacci example generates values on demand without computing the entire sequence upfront — ideal for potentially infinite sequences.
 
 ```cpp
 #include <coroutine>
@@ -611,6 +629,8 @@ sequenceDiagram
 
 ### Solution 1 — Parallel Async Computation
 
+This solution launches `factorial(15)` and `fibonacci(30)` on separate threads using `std::async`, so both computations run concurrently. Calling `.get()` on each future retrieves the result, blocking only if the computation hasn't finished yet.
+
 ```cpp
 #include <iostream>
 #include <future>
@@ -637,6 +657,8 @@ int main() {
 ```
 
 ### Solution 2 — Promise from Thread
+
+This creates a promise-future pair, moves the promise into a worker thread that sets a string value, and the main thread blocks on `fut.get()` until the value arrives. This demonstrates the simplest form of one-shot inter-thread communication.
 
 ```cpp
 #include <iostream>
