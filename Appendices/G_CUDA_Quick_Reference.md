@@ -128,6 +128,8 @@ processArray<<<128, 256>>>(d_data, 10000000);  // 128×256 = 32768 threads proce
 
 ### dim3 Usage
 
+The `dim3` type lets you specify 2D or 3D block and grid dimensions. Any unspecified dimension defaults to 1. This is essential for 2D problems like image processing or matrix operations where you want threads organized in a 2D layout.
+
 ```cuda
 dim3 blockSize(16, 16);       // 256 threads per block (2D)
 dim3 gridSize(
@@ -207,6 +209,8 @@ Grid
 
 ### Typical Workflow
 
+Every CUDA program follows the same five-step pattern: allocate GPU memory, copy input data to the GPU, launch the kernel, copy results back to the CPU, and free the GPU memory.
+
 ```cuda
 float *d_data;
 size_t bytes = N * sizeof(float);
@@ -232,6 +236,8 @@ cudaFree(d_data);                                        // 5. Free
 | **Texture** | Grid (read-only) | Application | ★★★★ Cached, spatial locality | Texture objects / `tex2D` | Device VRAM |
 
 ### Memory Qualifiers
+
+These qualifiers control where a variable lives on the GPU. Use `__device__` for global device memory, `__constant__` for read-only data broadcast to all threads, and `__shared__` for fast per-block scratchpad memory. Dynamic shared memory size is specified at kernel launch time.
 
 ```cuda
 __device__   float globalVar;            // Global memory (device-lifetime)
@@ -322,6 +328,8 @@ Exchange data between threads in a warp **without shared memory**.
 | `__shfl_down_sync(mask, val, delta)` | Get `val` from thread `laneId + delta` | Warp reduction |
 | `__shfl_xor_sync(mask, val, laneMask)` | Get `val` from thread `laneId ^ laneMask` | Butterfly reduction |
 
+This reduction sums all 32 values in a warp using `__shfl_down_sync`. Each iteration halves the active range — offset 16, 8, 4, 2, 1 — so after 5 steps, thread 0 (lane 0) holds the total sum.
+
 ```cuda
 // Warp reduction using __shfl_down_sync
 float val = threadData;
@@ -338,6 +346,8 @@ for (int offset = 16; offset > 0; offset >>= 1)
 | `__any_sync(mask, pred)` | Is any thread's pred ≠ 0? | `int` (0 or 1) |
 | `__all_sync(mask, pred)` | Are all threads' preds ≠ 0? | `int` (0 or 1) |
 | `__activemask()` | Bitmask of currently active threads | `unsigned int` |
+
+This example uses `__ballot_sync` to create a bitmask where each bit indicates whether a thread's value exceeds a threshold, then counts the matching threads with `__popc` (population count).
 
 ```cuda
 unsigned mask = __ballot_sync(0xFFFFFFFF, data[tid] > threshold);
@@ -370,6 +380,8 @@ Streams enable **concurrent execution** of kernels, memcpy, and other operations
 | `cudaDeviceGetStreamPriorityRange(&lo, &hi)` | Get valid priority range |
 
 ### Stream Usage Pattern
+
+This pattern demonstrates pipelining two independent workloads on separate streams. While stream `s1` is computing, stream `s2` can transfer data simultaneously — overlapping compute and memory transfers for better GPU utilization. Pinned memory (`cudaMallocHost`) is required for async transfers to actually be asynchronous.
 
 ```cuda
 cudaStream_t s1, s2;
@@ -411,6 +423,8 @@ Events are lightweight GPU timestamps used for **timing** and **inter-stream syn
 
 ### Timing Pattern
 
+Wrap your kernel launch between two event records to measure GPU execution time. `cudaEventSynchronize` blocks the CPU until the stop event finishes, and `cudaEventElapsedTime` returns the elapsed time in milliseconds with sub-microsecond precision.
+
 ```cuda
 cudaEvent_t start, stop;
 cudaEventCreate(&start);
@@ -432,6 +446,8 @@ cudaEventDestroy(stop);
 
 ### Inter-Stream Dependency
 
+Events create dependencies between streams. Here, `stream2` won't start its work until `stream1` reaches the recorded event — useful when one stream's output is another stream's input.
+
 ```cuda
 cudaEventRecord(event, stream1);       // Event placed in stream1
 cudaStreamWaitEvent(stream2, event);   // stream2 waits for event
@@ -452,6 +468,8 @@ cudaStreamWaitEvent(stream2, event);   // stream2 waits for event
 | `cudaGetErrorName(err)` | Error enum name as string |
 
 ### CUDA_CHECK Macro (Complete Implementation)
+
+This macro wraps every CUDA API call to check for errors immediately. On failure, it prints the file, line number, and error description, then exits. For kernel launches, you need two checks: `cudaGetLastError()` catches launch configuration errors, and `cudaDeviceSynchronize()` catches runtime errors inside the kernel.
 
 ```cuda
 #define CUDA_CHECK(call)                                                   \
@@ -523,6 +541,8 @@ CUDA_CHECK(cudaDeviceSynchronize());     // Check execution errors
 
 ### Device Query Snippet
 
+Enumerate all available GPUs and print their key specs. This is useful for verifying your CUDA setup and choosing the right device in multi-GPU systems.
+
 ```cuda
 int devCount;
 cudaGetDeviceCount(&devCount);
@@ -561,6 +581,8 @@ for (int d = 0; d < devCount; d++) {
 
 ### Multi-Architecture Compilation
 
+Build a "fat binary" containing optimized machine code (SASS) for multiple GPU architectures. Including `code=compute_90` on the last line embeds PTX intermediate code, which enables forward compatibility with future GPU architectures.
+
 ```bash
 # Fat binary targeting V100 + A100 + H100
 nvcc -gencode arch=compute_70,code=sm_70 \
@@ -587,6 +609,8 @@ nvcc -gencode arch=compute_70,code=sm_70 \
 
 ### Build Examples
 
+Common `nvcc` invocations for different build scenarios: debug builds with full symbol info, optimized release builds with register usage reports, and separate compilation for multi-file CUDA projects.
+
 ```bash
 # Debug build
 nvcc -G -g -lineinfo -arch=sm_80 -o debug_prog program.cu
@@ -606,12 +630,16 @@ nvcc -arch=sm_80 file1.o file2.o -o program
 
 ### Grid-Stride Loop
 
+Each thread processes multiple elements by striding across the array. This one-line pattern handles arrays of any size with any grid configuration.
+
 ```cuda
 for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
     output[i] = process(input[i]);
 ```
 
 ### 2D Indexing (Images/Matrices)
+
+Map each thread to a (row, col) position in a 2D array. The bounds check prevents out-of-range writes when the image dimensions aren't exact multiples of the block size.
 
 ```cuda
 int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -622,6 +650,8 @@ if (col < width && row < height)
 
 ### Warp Reduction (Sum)
 
+Sum all 32 values in a warp using shuffle-down operations. No shared memory needed — data moves directly between registers across threads.
+
 ```cuda
 __device__ float warpReduceSum(float val) {
     for (int offset = 16; offset > 0; offset >>= 1)
@@ -631,6 +661,8 @@ __device__ float warpReduceSum(float val) {
 ```
 
 ### Block Reduction via Shared Memory
+
+Two-phase reduction: first reduce within each warp (no shared memory needed), then collect per-warp results into shared memory and do a final warp reduction. This is the standard pattern for reducing values across an entire block.
 
 ```cuda
 __device__ float blockReduceSum(float val) {
@@ -649,6 +681,8 @@ __device__ float blockReduceSum(float val) {
 ```
 
 ### Shared Memory Tiled Matrix Multiply
+
+Each block loads a TILE×TILE sub-matrix of A and B into shared memory, computes partial dot products, then moves to the next tile. This reduces global memory reads from O(N) per element to O(N/TILE), dramatically improving performance by exploiting data reuse.
 
 ```cuda
 __global__ void matmul(float* A, float* B, float* C, int N) {
@@ -670,6 +704,8 @@ __global__ void matmul(float* A, float* B, float* C, int N) {
 ```
 
 ### Bounds-Checked Error Wrap
+
+Always check for errors after launching a kernel. `cudaGetLastError()` catches invalid launch parameters, and `cudaDeviceSynchronize()` catches errors that occur during kernel execution.
 
 ```cuda
 myKernel<<<grid, block>>>(args);
@@ -743,6 +779,8 @@ CUDA_CHECK(cudaDeviceSynchronize());
 | `cudaErrorAssert` | Device-side `assert()` failed | Debug kernel logic; check index calculations |
 
 ### Debugging Toolkit
+
+NVIDIA's `compute-sanitizer` tool suite detects memory errors, race conditions, and leaks in CUDA programs. For profiling, `nsys` gives a system-wide execution timeline while `ncu` provides detailed per-kernel analysis including occupancy and memory throughput.
 
 ```bash
 # Memory error detection

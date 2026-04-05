@@ -102,6 +102,9 @@ hipify-clang --print-stats cuda_source.cu
 ### Vector Add Comparison
 
 **CUDA:**
+
+This is the standard CUDA vector addition with explicit memory management — you manually allocate GPU memory, copy data to the device, launch the kernel, and copy results back. This allocate-copy-compute-copy-free pattern is the foundation of all CUDA programs.
+
 ```cuda
 #include <cuda_runtime.h>
 
@@ -124,6 +127,9 @@ int main() {
 ```
 
 **HIP (nearly identical):**
+
+The HIP version is almost a find-and-replace of CUDA — `cudaMalloc` becomes `hipMalloc`, `cudaMemcpy` becomes `hipMemcpy`, and so on. The kernel code, launch syntax (`<<<>>>`), and overall structure remain the same. This near-identical API is what makes automated conversion possible.
+
 ```cpp
 #include <hip/hip_runtime.h>
 
@@ -174,6 +180,8 @@ int main() {
 | `nccl*`                     | `rccl*`                       | Compatible API           |
 
 ### Portability Guide
+
+Use preprocessor directives to write code that compiles on both CUDA and HIP. Alternatively, you can use HIP everywhere since it maps to CUDA when compiled for NVIDIA GPUs.
 
 ```cpp
 // Write portable code using preprocessor
@@ -239,6 +247,9 @@ int main() {
 ```
 
 **SYCL (USM — more CUDA-like):**
+
+SYCL's Unified Shared Memory (USM) mode provides a pointer-based programming style similar to CUDA. You explicitly allocate device memory with `malloc_device`, copy data with `memcpy`, and free with `sycl::free` — making it a more familiar transition for CUDA developers.
+
 ```cpp
 #include <sycl/sycl.hpp>
 
@@ -277,6 +288,8 @@ int main() {
 | Error handling       | Error codes              | Exceptions (async handler)    |
 
 ### Conversion Tool: SYCLomatic (dpct)
+
+Intel's `dpct` tool automatically converts CUDA source files to SYCL. It generates working SYCL code with helper functions, though manual cleanup is usually needed for production-quality results.
 
 ```bash
 # Convert CUDA to SYCL
@@ -320,6 +333,9 @@ kernel void vecAdd(device const float* A [[buffer(0)]],
 ```
 
 **Metal Host Code (Swift):**
+
+The host-side Swift code sets up the Metal compute pipeline — loading the kernel from a compiled library, creating shared-memory buffers (no explicit CPU-to-GPU copy needed on Apple Silicon thanks to unified memory), encoding the dispatch, and committing the command buffer for execution.
+
 ```swift
 import Metal
 
@@ -422,6 +438,9 @@ __global__ void vecAdd(const float* A, const float* B, float* C, int N) {
 ```
 
 **Triton:**
+
+Triton replaces thread-level indexing with block-level programming. Instead of computing a single element per thread, each "program" processes an entire block of elements using `tl.arange`. The `mask` parameter handles bounds checking when the array size isn't a multiple of the block size. The `@triton.jit` decorator compiles this Python function into optimized GPU code.
+
 ```python
 import triton
 import triton.language as tl
@@ -536,6 +555,8 @@ Source code (.cpp, standard C++)
 
 ### Strategy 4: Python + Triton (ML-Focused)
 
+Write GPU kernels entirely in Python using Triton. The compiler automatically handles NVIDIA and AMD backends, making this the simplest path for ML teams that need custom GPU operations without learning CUDA or HIP.
+
 ```python
 # Write kernels in Triton (Python)
 # Backend handles NVIDIA/AMD compilation
@@ -551,6 +572,8 @@ def my_kernel(X, Y, N, BLOCK: tl.constexpr):
 ```
 
 ### Strategy 5: Conditional Compilation
+
+Define a unified set of macros that map to the correct GPU keywords for each platform. This lets you write kernel code once using `GPU_GLOBAL`, `GPU_SHARED`, etc., and the preprocessor selects the right backend at compile time. Note that SYCL uses a fundamentally different paradigm, so a 1:1 macro mapping isn't always possible.
 
 ```cpp
 // Unified header approach
@@ -588,6 +611,8 @@ def my_kernel(X, Y, N, BLOCK: tl.constexpr):
 
 ### Vulkan Compute Shader (GLSL → SPIR-V)
 
+Vulkan compute shaders are written in GLSL with explicit layout declarations for buffer bindings and workgroup sizes. The shader is compiled to SPIR-V bytecode before use. Notice the verbose setup compared to CUDA — you must declare each buffer binding, push constants, and workgroup dimensions manually.
+
 ```glsl
 #version 450
 layout(local_size_x = 256) in;
@@ -605,6 +630,8 @@ void main() {
     }
 }
 ```
+
+Use `glslangValidator` to compile the GLSL compute shader into SPIR-V binary format, which is the only shader format Vulkan accepts at runtime.
 
 ```bash
 # Compile GLSL to SPIR-V
