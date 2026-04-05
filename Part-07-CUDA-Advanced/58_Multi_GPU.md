@@ -6,15 +6,15 @@
 
 ## 1. Theory — Multi-GPU Architecture and Programming Model
 
-Modern AI workloads exceed the memory and compute capacity of a single GPU. Training a 70-billion-parameter LLM requires distributing work across 8, 64, or even thousands of GPUs. Multi-GPU programming is the discipline of partitioning computation, managing device memory across GPUs, orchestrating communication, and maximizing scaling efficiency.
+Modern AI workloads exceed a single GPU's memory and compute. Training a 70B-parameter LLM requires distributing work across 8, 64, or thousands of GPUs. Multi-GPU programming covers partitioning computation, managing device memory, orchestrating communication, and maximizing scaling efficiency.
 
 ### The Hardware Landscape
 
-Each GPU in a system has its own device memory (HBM), its own SM array, and its own PCIe or NVLink connections. The CUDA runtime treats each GPU as an independent **device** identified by an integer index (0, 1, 2, …). The programmer explicitly selects which device receives kernel launches and memory allocations via `cudaSetDevice()`.
+Each GPU has its own device memory (HBM), SM array, and PCIe/NVLink connections. The CUDA runtime treats each as an independent **device** (index 0, 1, 2, …). The programmer selects which device receives kernel launches and allocations via `cudaSetDevice()`.
 
 ### Memory Isolation and Peer Access
 
-By default, GPU 0 cannot dereference a pointer that lives in GPU 1's memory — the address spaces are separate. **Peer-to-peer (P2P) access** breaks this barrier. When two GPUs are connected via NVLink (or supported PCIe topologies), the driver can map one GPU's memory into another's address space, enabling direct load/store across devices without staging through host memory.
+By default, GPU 0 cannot dereference a pointer in GPU 1's memory. **Peer-to-peer (P2P) access** breaks this: when two GPUs are connected via NVLink (or supported PCIe), the driver maps one GPU's memory into another's address space, enabling direct load/store without staging through host memory.
 
 ### Interconnect Hierarchy
 
@@ -30,7 +30,7 @@ The bandwidth between GPUs varies dramatically depending on the interconnect:
 
 ### NVSwitch and DGX Topology
 
-In an **NVIDIA DGX H100** node, 8 H100 GPUs are connected through **NVSwitch**. NVSwitch acts as a crossbar — every GPU has a direct, full-bandwidth path to every other GPU. This is a **full mesh** topology at the hardware level. Contrast this with a **ring** topology (used in older NVLink systems without NVSwitch), where data must hop through intermediate GPUs.
+In an **NVIDIA DGX H100**, 8 H100 GPUs connect through **NVSwitch** — a crossbar giving every GPU a direct, full-bandwidth path to every other GPU (**full mesh**). Contrast with a **ring** topology (older NVLink without NVSwitch), where data hops through intermediate GPUs.
 
 **GPUDirect RDMA** allows a network adapter (InfiniBand HCA or RoCE NIC) to read/write GPU memory directly, bypassing CPU and system memory. This is critical for multi-node clusters: GPU 0 on Node A sends a tensor directly to GPU 3 on Node B without any CPU-side memcpy.
 
@@ -458,30 +458,18 @@ int main() {
 graph TB
     subgraph "DGX H100 Node — 8 GPUs + NVSwitch"
         NVS1[NVSwitch Fabric<br/>900 GB/s bisection]
-
-        GPU0["GPU 0<br/>80 GB HBM3"]
-        GPU1["GPU 1<br/>80 GB HBM3"]
-        GPU2["GPU 2<br/>80 GB HBM3"]
-        GPU3["GPU 3<br/>80 GB HBM3"]
-        GPU4["GPU 4<br/>80 GB HBM3"]
-        GPU5["GPU 5<br/>80 GB HBM3"]
-        GPU6["GPU 6<br/>80 GB HBM3"]
-        GPU7["GPU 7<br/>80 GB HBM3"]
-
-        GPU0 <--> NVS1
-        GPU1 <--> NVS1
-        GPU2 <--> NVS1
-        GPU3 <--> NVS1
-        GPU4 <--> NVS1
-        GPU5 <--> NVS1
-        GPU6 <--> NVS1
-        GPU7 <--> NVS1
+        GPU0["GPU 0"] --- NVS1
+        GPU1["GPU 1"] --- NVS1
+        GPU2["GPU 2"] --- NVS1
+        GPU3["GPU 3"] --- NVS1
+        GPU4["GPU 4"] --- NVS1
+        GPU5["GPU 5"] --- NVS1
+        GPU6["GPU 6"] --- NVS1
+        GPU7["GPU 7"] --- NVS1
     end
-
-    CPU["CPU<br/>Host Memory"] <-->|"PCIe Gen5"| GPU0
+    CPU["CPU + Host Mem"] <-->|"PCIe Gen5"| GPU0
     CPU <-->|"PCIe Gen5"| GPU4
-    NIC["InfiniBand NIC<br/>400 Gb/s"] <-->|"GPUDirect RDMA"| GPU0
-    NIC <-->|"GPUDirect RDMA"| GPU4
+    NIC["IB NIC 400Gb/s"] <-->|"GPUDirect RDMA"| GPU0
 ```
 
 ### 4.2 — Ring AllReduce Algorithm (4 GPUs)
@@ -492,34 +480,26 @@ sequenceDiagram
     participant G1 as GPU 1
     participant G2 as GPU 2
     participant G3 as GPU 3
-
     Note over G0,G3: Phase 1 — Reduce-Scatter (3 steps)
-
-    G0->>G1: chunk[3] of G0
-    G1->>G2: chunk[0] of G1
-    G2->>G3: chunk[1] of G2
-    G3->>G0: chunk[2] of G3
-
+    G0->>G1: chunk[3]
+    G1->>G2: chunk[0]
+    G2->>G3: chunk[1]
+    G3->>G0: chunk[2]
     Note over G0,G3: Each GPU accumulates received chunk
-
     G0->>G1: chunk[2]'
     G1->>G2: chunk[3]'
     G2->>G3: chunk[0]'
     G3->>G0: chunk[1]'
-
     G0->>G1: chunk[1]''
     G1->>G2: chunk[2]''
     G2->>G3: chunk[3]''
     G3->>G0: chunk[0]''
-
     Note over G0,G3: Phase 2 — AllGather (3 steps)
-
     G0->>G1: reduced chunk[0]
     G1->>G2: reduced chunk[1]
     G2->>G3: reduced chunk[2]
     G3->>G0: reduced chunk[3]
-
-    Note over G0,G3: After 3 more rotations: all GPUs have full result
+    Note over G0,G3: After 3 rotations all GPUs have full result
 ```
 
 ### 4.3 — Data-Parallel Training Flow
@@ -563,14 +543,14 @@ Allocate a large matrix (e.g., 8192×8192 floats). Split rows across available G
 Use NCCL to broadcast a weight vector from GPU 0 to all GPUs. Each GPU then multiplies its local data chunk by the weights. Gather the results on GPU 0 and verify correctness.
 
 ### 🔴 Exercise 5 — Scaling Efficiency Measurement
-Implement a compute-heavy kernel (e.g., large vector dot product). Run it on 1 GPU, then 2, then 4 (if available). Measure wall-clock time for each. Compute strong scaling efficiency: `E = T1 / (N × TN)`. Report where efficiency drops and why.
+Implement a compute-heavy kernel (e.g., large vector dot product). Run it on 1, 2, and 4 GPUs. Compute strong scaling efficiency: `E = T1 / (N × TN)`. Report where efficiency drops.
 
 ---
 
 ## 6. Solutions
 
-### Solution 1 — GPU Inventory
-See Code Example 3.1 above — it enumerates all devices and checks P2P between all pairs.
+### Solution 1
+See Code Example 3.1 — it enumerates all devices and checks P2P between all pairs.
 
 ### Solution 2 — P2P Bandwidth Benchmark (Core Loop)
 ```cuda
@@ -589,14 +569,14 @@ for (size_t size = 1 << 20; size <= (1 << 28); size <<= 1) {
 }
 ```
 
-### Solution 3 — Multi-GPU Matrix Fill
+### Solution 3
 Split rows: GPU `g` handles rows `[g*rowsPerGPU .. (g+1)*rowsPerGPU)`. Kernel assigns `data[idx] = (float)(startRow + idx / cols)`.
 
-### Solution 4 — NCCL Broadcast + Compute
+### Solution 4
 Use `ncclBroadcast(weights, weights, N, ncclFloat, 0, comms[i], streams[i])` inside a group, then launch a pointwise multiply kernel on each GPU.
 
-### Solution 5 — Scaling Efficiency
-Run kernel on 1 GPU → T1. Split across N GPUs → TN. Efficiency = T1 / (N × TN). Expect ~90%+ for compute-bound kernels with minimal communication.
+### Solution 5
+Run kernel on 1 GPU → T1. Split across N GPUs → TN. Efficiency = T1 / (N × TN). Expect ~90%+ for compute-bound kernels.
 
 ---
 
@@ -614,7 +594,7 @@ Run kernel on 1 GPU → T1. Split across N GPUs → TN. Efficiency = T1 / (N × 
 - (C) `cudaSetDevice`
 - (D) `cudaMallocManaged`
 
-**Q3.** In a Ring AllReduce with N GPUs, how much data does each GPU send in total?
+**Q3.** In Ring AllReduce with N GPUs, how much data does each GPU send total?
 - (A) DataSize
 - (B) 2 × DataSize
 - (C) 2 × (N−1)/N × DataSize ✅
@@ -626,19 +606,19 @@ Run kernel on 1 GPU → T1. Split across N GPUs → TN. Efficiency = T1 / (N × 
 - (C) Unified memory addressing
 - (D) Zero-copy host memory access
 
-**Q5.** Which NCCL collective results in every GPU having the sum of all GPUs' buffers?
+**Q5.** Which NCCL collective gives every GPU the sum of all buffers?
 - (A) Broadcast
 - (B) AllGather
 - (C) AllReduce ✅
 - (D) ReduceScatter
 
-**Q6.** NVSwitch provides which topology between GPUs?
+**Q6.** NVSwitch provides which topology?
 - (A) Ring
 - (B) Tree
 - (C) Full mesh / crossbar ✅
 - (D) Star with CPU as hub
 
-**Q7.** In data-parallel training, what is communicated between GPUs after each backward pass?
+**Q7.** In data-parallel training, what is communicated after each backward pass?
 - (A) Input data
 - (B) Activations
 - (C) Gradients ✅
@@ -665,13 +645,9 @@ Run kernel on 1 GPU → T1. Split across N GPUs → TN. Efficiency = T1 / (N × 
 - **Amdahl's Law** applies: if 5% of your pipeline is serial (data loading, CPU preprocessing), max speedup is 20× regardless of GPU count.
 - **Pinned (page-locked) host memory** is required for overlapping transfers with compute across GPUs.
 
----
-
 ## 9. Chapter Summary
 
 Multi-GPU programming transforms a single-GPU CUDA application into a distributed system. The programmer manages device selection (`cudaSetDevice`), enables peer-to-peer access for direct GPU-to-GPU communication, partitions data across devices, and synchronizes results. NVLink and NVSwitch provide high-bandwidth interconnects, while GPUDirect RDMA extends this to multi-node clusters. NCCL's Ring AllReduce ensures gradient synchronization scales efficiently — sending only `2(N-1)/N` of the data per GPU regardless of participant count. In practice, data-parallel training on 8 GPUs achieves 90–95% linear scaling on large models, but Amdahl's Law reminds us that serial bottlenecks cap achievable speedup. Mastering multi-GPU programming is essential for large-scale AI/ML systems.
-
----
 
 ## 10. Real-World Insight — AI/ML Applications
 
