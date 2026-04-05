@@ -12,10 +12,13 @@ Attention on Tensor Cores.
 
 | Metric | Count |
 |---|---|
-| **Total files** | 93 |
-| **Total lines** | 63 000+ |
+| **Total files** | 114 |
+| **Total lines** | 80 000+ |
 | **Chapters** | 70 |
 | **Hands-on projects** | 15 + 2 capstones |
+| **CUDA Labs** | 10 |
+| **CUDA Cookbook & Guides** | 5 |
+| **CUDA Optimization Case Studies** | 5 |
 | **Appendices** | 6 |
 
 ---
@@ -61,6 +64,9 @@ graph LR
 | 7 | [CUDA Advanced](#part-7--cuda-advanced) | Ch 54 – 63 | Streams, multi-GPU, graphs, Tensor Cores, profiling |
 | 8 | [CUDA for AI/ML](#part-8--cuda-for-aiml) | Ch 64 – 70 | cuBLAS, cuDNN, TensorRT, Flash Attention, PyTorch C++ |
 | 9 | [Projects & Capstones](#part-9--projects--capstones) | P01 – P15, C01 – C02 | 15 guided projects + 2 full capstones |
+| — | [CUDA Labs](#-cuda-hands-on-labs) | Lab 01 – 10 | Step-by-step guided GPU experiments |
+| — | [CUDA Cookbook](#-cuda-cookbook--guides) | 5 guides | Patterns, anti-patterns, benchmarks, mindset, code reading |
+| — | [CUDA Case Studies](#-cuda-optimization-case-studies) | CS 01 – 05 | Softmax, LayerNorm, GEMM, Attention, Fusion |
 | — | [Appendices](#appendices) | A – F | Interview guide, perf cheat sheet, CMake, debugging |
 
 ---
@@ -240,6 +246,78 @@ graph LR
 
 ---
 
+## 🧪 CUDA Hands-On Labs
+
+> **10 guided labs** · Run code, observe results, experiment with changes. The fastest way to build GPU intuition.
+
+| # | Lab | Difficulty | File |
+|---|-----|-----------|------|
+| 01 | Your First GPU Program | 🟢 Beginner | [Lab01_First_GPU_Program.md](CUDA-Labs/Lab01_First_GPU_Program.md) |
+| 02 | Thread Indexing Playground | 🟢 Beginner | [Lab02_Thread_Indexing_Playground.md](CUDA-Labs/Lab02_Thread_Indexing_Playground.md) |
+| 03 | Memory Transfer Costs | 🟢 Beginner | [Lab03_Memory_Transfer_Costs.md](CUDA-Labs/Lab03_Memory_Transfer_Costs.md) |
+| 04 | Shared Memory Speedup | 🟡 Intermediate | [Lab04_Shared_Memory_Speedup.md](CUDA-Labs/Lab04_Shared_Memory_Speedup.md) |
+| 05 | Warp Divergence Impact | 🟡 Intermediate | [Lab05_Warp_Divergence_Impact.md](CUDA-Labs/Lab05_Warp_Divergence_Impact.md) |
+| 06 | Occupancy Experiments | 🟡 Intermediate | [Lab06_Occupancy_Experiments.md](CUDA-Labs/Lab06_Occupancy_Experiments.md) |
+| 07 | Coalescing Patterns | 🟡 Intermediate | [Lab07_Coalescing_Patterns.md](CUDA-Labs/Lab07_Coalescing_Patterns.md) |
+| 08 | Stream Overlap | 🔴 Advanced | [Lab08_Stream_Overlap.md](CUDA-Labs/Lab08_Stream_Overlap.md) |
+| 09 | Reduction Optimization Journey | 🔴 Advanced | [Lab09_Reduction_Optimization.md](CUDA-Labs/Lab09_Reduction_Optimization.md) |
+| 10 | Build a Mini GEMM | 🔴 Advanced | [Lab10_Build_A_Mini_GEMM.md](CUDA-Labs/Lab10_Build_A_Mini_GEMM.md) |
+
+---
+
+## 📖 CUDA Cookbook & Guides
+
+> **5 practical references** · Patterns, anti-patterns, benchmarks, and the parallel-thinking mindset shift.
+
+| Guide | What It Is | File |
+|-------|-----------|------|
+| 🧩 Patterns Cookbook | 30 copy-paste CUDA patterns ("I need X → here's the code") | [CUDA_Patterns_Cookbook.md](CUDA-Cookbook/CUDA_Patterns_Cookbook.md) |
+| ❌ Anti-Patterns | 20 common mistakes with before/after code | [CUDA_Anti_Patterns.md](CUDA-Cookbook/CUDA_Anti_Patterns.md) |
+| 🧠 Think Parallel | CPU → GPU mindset shift with 10 worked conversions | [Think_Parallel.md](CUDA-Cookbook/Think_Parallel.md) |
+| 📊 Micro-Benchmarks | 12 programs isolating specific GPU behaviors | [CUDA_Micro_Benchmarks.md](CUDA-Cookbook/CUDA_Micro_Benchmarks.md) |
+| 📚 Code Reading Guide | How to read PyTorch/CUTLASS/FlashAttention CUDA code | [CUDA_Code_Reading_Guide.md](CUDA-Cookbook/CUDA_Code_Reading_Guide.md) |
+
+---
+
+## 🔬 CUDA Optimization Case Studies
+
+> **5 deep-dives** · Take a real ML kernel from naive to expert, with profiling at every step.
+
+| # | Kernel | Optimization Journey | File |
+|---|--------|---------------------|------|
+| CS01 | Softmax | Naive → online softmax → warp shuffle → vectorized → fused | [CS01_Softmax_Optimization.md](CUDA-Case-Studies/CS01_Softmax_Optimization.md) |
+| CS02 | LayerNorm | Two-pass → Welford → warp reduction → fused residual+dropout | [CS02_LayerNorm_Optimization.md](CUDA-Case-Studies/CS02_LayerNorm_Optimization.md) |
+| CS03 | GEMM | Naive → tiled → register blocking → vectorized → Tensor Cores | [CS03_GEMM_Optimization.md](CUDA-Case-Studies/CS03_GEMM_Optimization.md) |
+| CS04 | Attention | Full N×N matrix → fused softmax → tiled → Flash Attention | [CS04_Attention_Optimization.md](CUDA-Case-Studies/CS04_Attention_Optimization.md) |
+| CS05 | Elementwise Fusion | 3 kernels → 1 fused kernel → vectorized → template fusion | [CS05_Elementwise_Fusion.md](CUDA-Case-Studies/CS05_Elementwise_Fusion.md) |
+
+---
+
+## 🎯 Recommended CUDA Mastery Reading Order
+
+> For someone who knows C++ but is new to CUDA — the optimal path through all CUDA content:
+
+| Phase | What to Read | Goal |
+|-------|-------------|------|
+| **1. Architecture** | Ch 44 (GPU Architecture) → Appendix E (Timeline) | Understand the hardware |
+| **2. First Kernels** | Ch 45-46 → Lab 01-02 | Write and run your first GPU code |
+| **3. Memory Model** | Ch 47-48 → Lab 03 → Cookbook: Think Parallel | Understand memory hierarchy & warps |
+| **4. Shared Memory** | Ch 49 → Lab 04 → Lab 07 | Master tiling and coalescing |
+| **5. Debugging** | Ch 51 → Anti-Patterns guide | Learn what NOT to do |
+| **6. Warp-Level** | Ch 52 → Lab 05-06 | Warp primitives & occupancy |
+| **7. Optimization** | Ch 55-56 → Lab 09 → Micro-Benchmarks | Memory & compute optimization |
+| **8. Profiling** | Ch 57 → Appendix D | Profile like a pro with Nsight |
+| **9. Streams & Graphs** | Ch 54, 59 → Lab 08 | Async execution & launch optimization |
+| **10. Case Studies** | CS01-CS05 (Softmax → GEMM → Attention) | See optimization applied to real kernels |
+| **11. Multi-GPU** | Ch 58, 60-61 | Scale beyond one GPU |
+| **12. Tensor Cores** | Ch 62 → Lab 10 | Mixed precision & matrix hardware |
+| **13. AI/ML Libraries** | Ch 64-70 | cuBLAS, cuDNN, TensorRT, Flash Attention |
+| **14. Code Reading** | Code Reading Guide | Study production CUDA from PyTorch/CUTLASS |
+| **15. Build Projects** | P06 → P07 → P08 → P09 → P11 → P15 → C02 | Apply everything (beginner → capstone) |
+| **16. Portability** | Appendix F | CUDA vs HIP vs SYCL vs Triton |
+
+---
+
 ## Appendices
 
 > **6 reference appendices** · Quick-reference material you'll reach for again and again.
@@ -274,9 +352,12 @@ Parts ............ 9
 Chapters ......... 70  (Ch 01 – Ch 70)
 Projects ......... 15  (P01 – P15)
 Capstones ........ 2   (C01 – C02)
+CUDA Labs ........ 10  (Lab 01 – Lab 10)
+CUDA Cookbook ..... 5   (Patterns, Anti-Patterns, Think Parallel, Benchmarks, Code Reading)
+Case Studies ..... 5   (CS01 – CS05: Softmax, LayerNorm, GEMM, Attention, Fusion)
 Appendices ....... 6   (A – F)
-Total files ...... 93
-Total lines ...... 63 000+
+Total files ...... 114
+Total lines ...... 80 000+
 ```
 
 ---
