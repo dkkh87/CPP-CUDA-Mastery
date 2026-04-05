@@ -24,6 +24,8 @@ C++ formalizes this through **RAII — Resource Acquisition Is Initialization**:
 
 ### What Goes Wrong with Manual Management
 
+This function shows the classic memory leak pattern: if an exception is thrown between `new` and `delete`, the `delete` is never reached and the memory leaks. Smart pointers solve this because their destructors run automatically during stack unwinding.
+
 ```cpp
 void dangerous() {
     int* data = new int[1000];
@@ -42,6 +44,8 @@ void dangerous() {
 | Ownership ambiguity | Type signature documents intent |
 
 ### How — Simplified `unique_ptr` Model
+
+This stripped-down implementation shows how `unique_ptr` works under the hood: it stores a raw pointer, deletes it in the destructor, supports move semantics (transferring ownership), and explicitly deletes copy operations to enforce single-owner semantics.
 
 ```cpp
 template <typename T>
@@ -65,6 +69,8 @@ public:
 ---
 
 ## 3. `unique_ptr` — Exclusive Ownership
+
+This example demonstrates creating a `unique_ptr` with `make_unique`, transferring ownership via `std::move`, and storing unique pointers in a `std::vector`. Notice that after moving `s` to `s2`, the original `s` becomes `nullptr` — only one `unique_ptr` owns the object at any time.
 
 ```cpp
 #include <memory>
@@ -92,6 +98,8 @@ int main() {
 ```
 
 ### Custom Deleters
+
+This example wraps a C `FILE*` in a `unique_ptr` with a custom deleter functor. Instead of calling `delete`, the deleter calls `fclose()` when the pointer goes out of scope. This technique lets you use RAII with any C-style resource, not just heap memory.
 
 ```cpp
 #include <memory>
@@ -123,11 +131,9 @@ graph LR
     CB --> OBJ["Widget object"]
 ```
 
-```cpp
-#include <memory>
-#include <iostream>
+This example shows `shared_ptr` in action: when `w2` is created as a copy of `w1`, the reference count increases to 2. When `w2` goes out of scope, the count drops back to 1. The `Widget` is only destroyed when the last `shared_ptr` (here `w1`) is destroyed and the count reaches 0.
 
-struct Widget {
+```cpp
     std::string name;
     Widget(std::string n) : name(std::move(n)) { std::cout << name << " created\n"; }
     ~Widget() { std::cout << name << " destroyed\n"; }
@@ -141,6 +147,8 @@ int main() {
 ```
 
 ### `make_shared` — Performance and Exception Safety
+
+This comparison shows why `make_shared` is preferred over constructing a `shared_ptr` from `new`. The `new`-based approach requires two separate heap allocations (one for the object, one for the control block), while `make_shared` coalesces both into a single allocation for better performance and cache locality.
 
 ```cpp
 // BAD: Two allocations (object + control block)
@@ -156,6 +164,8 @@ auto p2 = std::make_shared<int>(42);
 ## 5. `weak_ptr` — Breaking Circular References
 
 ### The Problem
+
+This code demonstrates a memory leak caused by circular references. Nodes `A` and `B` each hold a `shared_ptr` to the other, so both reference counts stay at 1 even after `a` and `b` go out of scope — neither node is ever destroyed.
 
 ```cpp
 struct Node {
@@ -174,6 +184,8 @@ void leak() {
 ```
 
 ### The Fix
+
+The fix replaces the back-reference (`prev`) with a `weak_ptr`, which does not increment the reference count. This breaks the cycle: when `a` and `b` go out of scope, the strong counts drop to zero and both nodes are properly destroyed.
 
 ```cpp
 struct SafeNode {
@@ -208,6 +220,8 @@ graph LR
 
 ## 6. Overhead Analysis
 
+This program prints the sizes of smart pointer types to show their memory overhead. On a 64-bit system, `unique_ptr` is the same size as a raw pointer (zero overhead), while `shared_ptr` and `weak_ptr` are double the size because they store both the object pointer and a pointer to the control block.
+
 ```cpp
 #include <memory>
 #include <iostream>
@@ -229,6 +243,8 @@ int main() {
 ---
 
 ## 7. Ownership Transfer — Factory Pattern
+
+This example shows the recommended factory pattern: return `unique_ptr` from factory functions so the caller decides the ownership model. The caller can use it as-is, move it into a sink function, or convert it to a `shared_ptr` if shared ownership is needed.
 
 ```cpp
 #include <memory>
@@ -281,8 +297,9 @@ graph TD
     style WP fill:#FF9800,color:#fff
 ```
 
+These three function signatures illustrate when to use raw pointers vs smart pointers: use raw pointers or references for non-owning access (the function won't delete the object), and `unique_ptr` when the function takes ownership.
+
 ```cpp
-void process(const Widget* w) { w->do_work(); }   // non-owning: raw ptr OK
 void consume(std::unique_ptr<Widget> w) { /*...*/ } // owning: smart ptr
 void must_have(const Widget& w) { w.do_work(); }    // non-null: use ref
 ```
@@ -310,6 +327,8 @@ Build `Cache<K,V>` using `weak_ptr` internally so expired entries auto-evict. Gu
 <details>
 <summary>🟢 Solution 1 — FileGuard</summary>
 
+This `FileGuard` class wraps a C `FILE*` in a `unique_ptr` with a custom `Closer` functor. The constructor opens the file and throws if it fails, while the destructor (via the smart pointer) automatically closes it — a clean RAII wrapper for C-style file I/O.
+
 ```cpp
 #include <memory>
 #include <cstdio>
@@ -336,6 +355,8 @@ int main() {
 
 <details>
 <summary>🟡 Solution 2 — Observer</summary>
+
+This solution implements the Observer pattern using smart pointers. The `Listener` holds a `weak_ptr` to the `EventBus`, so it can detect when the bus is destroyed via `expired()` without preventing that destruction. The `EventBus` uses `enable_shared_from_this` to safely share its own `shared_ptr` with subscribers.
 
 ```cpp
 #include <memory>
@@ -372,6 +393,8 @@ int main() {
 
 <details>
 <summary>🔴 Solution 3 — Thread-Safe Cache</summary>
+
+This thread-safe cache stores `weak_ptr` values so that cached objects are automatically evicted when no external `shared_ptr` references them. A `std::mutex` protects concurrent access, and the `get()` method uses a factory function to create new entries on cache misses.
 
 ```cpp
 #include <memory>

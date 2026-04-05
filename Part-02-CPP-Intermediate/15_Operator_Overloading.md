@@ -64,6 +64,8 @@ flowchart TD
 
 ### 4.1 Arithmetic Operators (+, -, *, /)
 
+This `Fraction` class demonstrates the canonical pattern for arithmetic operator overloading: define `+=` and `*=` as member functions (they modify `this`), then implement `+` and `*` as free functions that take the left operand by value and delegate to the compound-assign operators. The class also auto-simplifies fractions using `std::gcd`.
+
 ```cpp
 #include <iostream>
 #include <numeric>
@@ -108,6 +110,8 @@ int main() {
 
 ### 4.2 Comparison Operators & C++20 Spaceship (`<=>`)
 
+This `Employee` struct uses the C++20 three-way comparison ("spaceship") operator to define a custom sort order — first by `id`, then by `name`. By defining just `<=>` and defaulting `==`, the compiler automatically generates all six comparison operators (`<`, `<=`, `>`, `>=`, `==`, `!=`).
+
 ```cpp
 #include <compare>
 #include <iostream>
@@ -138,6 +142,8 @@ int main() {
 
 ### 4.3 Stream Operators (`<<` and `>>`)
 
+This `Point` class overloads the stream insertion (`<<`) and extraction (`>>`) operators as `friend` free functions. They must be free functions because the left-hand side is an `ostream`/`istream`, not your type. The `friend` keyword grants access to private members.
+
 ```cpp
 #include <iostream>
 #include <sstream>
@@ -167,6 +173,8 @@ int main() {
 
 ### 4.4 Subscript Operator `[]`
 
+This `Matrix` class overloads `operator[]` to provide 2D array-like syntax (`m[row][col]`). It returns a reference to the inner `vector`, which then uses its own `[]` for column access. Note the const and non-const overloads — the const version prevents modification of elements on const matrices.
+
 ```cpp
 #include <iostream>
 #include <vector>
@@ -190,6 +198,8 @@ int main() {
 ---
 
 ### 4.5 Function Call Operator `()` — Functors
+
+These two classes — `MultiplyBy` and `InRange` — are functors: they overload `operator()` so instances can be called like functions. Unlike plain function pointers, functors can carry state (the `factor_`, `lo_`, `hi_` members), making them ideal for use with STL algorithms like `std::transform` and `std::count_if`.
 
 ```cpp
 #include <algorithm>
@@ -226,6 +236,8 @@ int main() {
 
 ### 4.6 Conversion Operators
 
+The `Meters` class defines conversion operators that let a `Meters` object be used where a `double`, `int`, or `bool` is expected. The `explicit` keyword on `int` and `bool` conversions prevents accidental implicit conversion, while `operator double()` is left implicit intentionally. Note that `explicit operator bool()` is special — it still works in `if`/`while`/`&&`/`||` contexts.
+
 ```cpp
 #include <iostream>
 
@@ -251,6 +263,8 @@ int main() {
 ---
 
 ### 4.7 Complete Vector3D Class
+
+This `Vector3D` class brings together all the overloading techniques from this chapter into a single, production-style example: unary negation, compound assignment (`+=`, `-=`, `*=`) as members, binary arithmetic (`+`, `-`, `*`) as free functions built on top, subscript access, equality via `= default`, an explicit bool conversion, and stream output. It also includes standalone `dot` and `cross` product functions.
 
 ```cpp
 #include <cmath>
@@ -368,6 +382,8 @@ Implement lazy vector arithmetic so `auto r = a + b * 2.0 - c;` builds an expres
 <details>
 <summary>🟢 Solution 1 — Complex</summary>
 
+This solution implements a `Complex` number class following the canonical pattern: `+=` and `-=` as members, then `+` and `-` as free functions that copy-and-delegate. The `friend operator<<` formats output as `(real, imag)`.
+
 ```cpp
 #include <iostream>
 class Complex {
@@ -394,6 +410,8 @@ int main() {
 
 <details>
 <summary>🟡 Solution 2 — SafeArray</summary>
+
+This `SafeArray` template wraps `std::array` and overloads `[]` using `at()` for bounds-checked access, `==` for equality comparison, and `<<` for formatted output. The const and non-const `[]` overloads ensure both reading and writing work correctly.
 
 ```cpp
 #include <array>
@@ -423,6 +441,8 @@ int main() {
 
 <details>
 <summary>🔴 Solution 3 — Expression Templates (Sketch)</summary>
+
+This is a simplified expression template implementation. `VecExpr<E>` is a CRTP base that uses static polymorphism to build a lazy expression tree — `VecAdd` stores references to its operands instead of computing results immediately. The actual computation only happens when the result is assigned to a `Vec`, avoiding temporary vector allocations.
 
 ```cpp
 #include <iostream>

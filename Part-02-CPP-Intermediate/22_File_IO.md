@@ -63,6 +63,8 @@ portable path manipulation, directory traversal, and atomic file operations.
 
 ### 3.1 — Text File Read & Write
 
+This program demonstrates the most basic file I/O pattern in C++: writing lines to a text file with `ofstream`, then reading them back with `ifstream` and `getline`. Notice how the write block is wrapped in braces — the `ofstream` destructor flushes and closes the file automatically (RAII), guaranteeing the data is on disk before the read block opens the same file.
+
 ```cpp
 // text_io.cpp — compile: g++ -std=c++20 -o text_io text_io.cpp
 #include <fstream>
@@ -92,6 +94,8 @@ int main() {
 ```
 
 ### 3.2 — Binary I/O: Raw Byte Serialization
+
+This example writes and reads a `std::vector` of `SensorReading` structs as raw bytes using `reinterpret_cast`. It first writes the element count as a `uint64_t` header, then dumps the entire vector's memory in one `write()` call. This is the fastest possible I/O — no formatting overhead — but the binary layout is platform-dependent (endianness and struct padding), so it's only suitable for same-machine storage.
 
 ```cpp
 // binary_io.cpp — compile: g++ -std=c++20 -o binary_io binary_io.cpp
@@ -152,6 +156,8 @@ int main() {
 
 ### 3.3 — std::filesystem (C++17)
 
+This program showcases the `std::filesystem` library for portable file and directory operations. It builds paths with the `/` operator, creates nested directory trees in one call, iterates directories recursively, copies files, and queries available disk space — all without any platform-specific `#ifdef` blocks or POSIX system calls.
+
 ```cpp
 // fs_demo.cpp — compile: g++ -std=c++20 -o fs_demo fs_demo.cpp
 #include <filesystem>
@@ -201,6 +207,8 @@ int main() {
 
 ### 3.4 — String Streams for Parsing
 
+This example uses `std::istringstream` and `std::ostringstream` to parse and build strings in memory without touching the disk. The `split` function tokenizes a string by a delimiter (like Python's `str.split`), the main function parses `key=value` pairs from a configuration string, and an `ostringstream` assembles a SQL INSERT statement. String streams are ideal for lightweight parsing tasks where a full file isn't involved.
+
 ```cpp
 // sstream_demo.cpp — compile: g++ -std=c++20 -o sstream_demo sstream_demo.cpp
 #include <iostream>
@@ -248,6 +256,8 @@ int main() {
 ```
 
 ### 3.5 — CSV Parsing (Practical Example)
+
+This program reads a comma-separated file by combining `std::getline` (to read each row) with `std::istringstream` (to split each row by commas). It skips the header line, parses each field into a `Record` struct, and converts strings to numbers with `std::stoi`/`std::stod`. This is a real-world pattern you'll encounter whenever you need to load tabular data without an external CSV library.
 
 ```cpp
 // csv_parser.cpp — compile: g++ -std=c++20 -o csv_parser csv_parser.cpp
@@ -311,6 +321,8 @@ int main() {
 ```
 
 ### 3.6 — Serialization Patterns: Text vs Binary vs JSON
+
+This example implements three serialization methods for the same `Config` struct: text (human-readable, one field per line), binary (compact, length-prefixed string followed by raw fields), and a simple JSON renderer using `ostringstream`. Comparing all three in one file highlights the trade-offs: text is debuggable but slow to parse, binary is fast but not portable, and JSON is interoperable but requires careful escaping in production.
 
 ```cpp
 // serialization.cpp — compile: g++ -std=c++20 -o serialization serialization.cpp
@@ -397,6 +409,8 @@ int main() {
 
 ### 3.7 — Error Handling in I/O
 
+This code shows a defensive I/O pattern: first check if the file exists using `std::filesystem`, then verify the stream opened successfully, and finally enable exceptions for `badbit` so that irrecoverable errors (like a disk failure mid-read) are caught as C++ exceptions. It also demonstrates the no-throw `std::error_code` overload for filesystem queries in performance-sensitive contexts.
+
 ```cpp
 // error_handling.cpp — compile: g++ -std=c++20 -o error_handling error_handling.cpp
 #include <fstream>
@@ -446,6 +460,8 @@ int main() {
 ```
 
 ### 3.8 — Performance: Buffered I/O & mmap
+
+This benchmark compares two approaches for reading a 10 MiB file: standard buffered `ifstream::read()` (which copies data from kernel space into a user-space buffer) versus `mmap` (which maps the file directly into the process's virtual address space for zero-copy access). The `mmap` approach lets the OS page cache serve the data directly, which can be significantly faster for large files with random access patterns.
 
 ```cpp
 // perf_io.cpp — compile: g++ -std=c++20 -o perf_io perf_io.cpp
@@ -676,6 +692,8 @@ write the top-20 words to an output file.  Compare wall-clock time against a
 
 ### E1 — Line counter
 
+This solution reads a file line by line, counting lines, words (by splitting each line with `istringstream`), and characters. It mimics the Unix `wc` command, adding 1 to the character count per line to account for the newline that `getline` strips.
+
 ```cpp
 // wc_lite.cpp — g++ -std=c++20 -o wc_lite wc_lite.cpp
 #include <fstream>
@@ -706,6 +724,8 @@ int main(int argc, char* argv[]) {
 ```
 
 ### M1 — CSV statistics
+
+This solution creates a sample CSV, then parses it by skipping the header and splitting each row by commas. It computes each student's average across three scores and tracks a running total for the class average, demonstrating the standard `getline` + `istringstream` CSV parsing pattern.
 
 ```cpp
 // csv_stats.cpp — g++ -std=c++20 -o csv_stats csv_stats.cpp

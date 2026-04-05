@@ -104,6 +104,8 @@ flowchart TD
 
 ### 4.1 — Function Templates and Type Deduction
 
+This example shows three ways to write function templates: a classic single-type template (`maximum`), a multi-type template with a trailing return type (`add`), and the C++20 shorthand using `auto` parameters (`multiply`). It demonstrates how the compiler automatically deduces `T` from the arguments you pass, so you rarely need to spell out the type explicitly.
+
 ```cpp
 // func_templates.cpp — compile: g++ -std=c++20 -Wall -Wextra -o func_templates func_templates.cpp
 #include <iostream>
@@ -149,6 +151,8 @@ int main() {
 ```
 
 ### 4.2 — Class Templates
+
+This program builds a `FixedStack` class template that stores elements in a compile-time-sized `std::array`. Both the element type `T` and the maximum capacity are template parameters, which means the compiler generates a completely separate class for each combination (e.g., `FixedStack<int, 8>` vs `FixedStack<std::string, 64>`). This pattern avoids heap allocation and is common in embedded and performance-critical code.
 
 ```cpp
 // class_templates.cpp — compile: g++ -std=c++20 -Wall -Wextra -o class_templates class_templates.cpp
@@ -206,6 +210,8 @@ int main() {
 ```
 
 ### 4.3 — Template Specialization (Full and Partial)
+
+This code demonstrates both full and partial template specialization. The `TypeInfo` struct has a generic "unknown" primary template, then full specializations for `int`, `double`, and `const char*` that return specific names. A partial specialization for `T*` catches all pointer types. The `Pair` class shows partial specialization triggered when both types match — the compiler picks the most specific specialization available.
 
 ```cpp
 // specialization.cpp — compile: g++ -std=c++20 -Wall -Wextra -o specialization specialization.cpp
@@ -285,6 +291,8 @@ int main() {
 
 ### 4.4 — Non-Type Template Parameters
 
+Here, the `Matrix` class uses non-type template parameters (`Rows` and `Cols`) to embed the matrix dimensions directly into the type. This means `Matrix<double, 2, 3>` and `Matrix<double, 3, 2>` are completely different types, and the `matmul` function enforces dimension compatibility at compile time — a dimension mismatch is a compile error, not a runtime crash.
+
 ```cpp
 // non_type.cpp — compile: g++ -std=c++20 -Wall -Wextra -o non_type non_type.cpp
 #include <iostream>
@@ -355,6 +363,8 @@ int main() {
 ```
 
 ### 4.5 — SFINAE and Type Traits
+
+This example shows three compile-time dispatch techniques. `safe_divide` uses `std::enable_if` to provide separate implementations for integers (with a zero-check) and floats (which rely on IEEE 754 infinity). `describe_type` uses type traits to inspect properties of any type at compile time. Finally, `to_debug_string` uses C++17 `if constexpr` — the cleanest approach — to branch on type properties, with unreachable branches discarded entirely by the compiler.
 
 ```cpp
 // sfinae.cpp — compile: g++ -std=c++20 -Wall -Wextra -o sfinae sfinae.cpp
@@ -432,6 +442,8 @@ int main() {
 ```
 
 ### 4.6 — Variadic Templates (Preview)
+
+This code introduces variadic templates, which accept any number of arguments of any types. The `print` function uses recursive template expansion — each call peels off the first argument and forwards the rest. The `sum` and `all_positive` functions use C++17 fold expressions, which are a much more concise way to reduce a parameter pack into a single value using an operator.
 
 ```cpp
 // variadic.cpp — compile: g++ -std=c++20 -Wall -Wextra -o variadic variadic.cpp
@@ -525,6 +537,8 @@ graph LR
 
 ### Explicit Instantiation Example
 
+This snippet shows how to keep template definitions in a `.cpp` file by explicitly instantiating them for specific types. The `stack.cpp` file forces the compiler to generate `Stack<int>`, `Stack<double>`, and `Stack<std::string>`, while `main.cpp` uses `extern template` to avoid redundant instantiation. This technique reduces compile times in large projects where you know all the types upfront.
+
 ```cpp
 // stack.h
 template <typename T>
@@ -581,6 +595,8 @@ Use `std::enable_if` or `if constexpr` to implement the dispatch.
 
 ### Solution 1 — Generic Swap
 
+This solution implements a generic `my_swap` using `std::move` to efficiently transfer ownership of resources (especially important for types like `std::string` that manage heap memory). The three-step move-swap pattern avoids unnecessary copies.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -605,6 +621,8 @@ int main() {
 
 ### Solution 2 — Array Sum
 
+This solution uses both a type parameter `T` and a non-type parameter `N` to accept a `std::array` of any element type and any size. The function initializes a zero-valued accumulator with `T{}` and sums all elements, demonstrating how non-type parameters let the compiler enforce the array size at compile time.
+
 ```cpp
 #include <iostream>
 #include <array>
@@ -626,6 +644,8 @@ int main() {
 ```
 
 ### Solution 4 — Compile-Time Factorial
+
+This solution computes factorials entirely at compile time using recursive template instantiation. The primary template multiplies `N` by `Factorial<N-1>::value`, and the base-case specialization for `N=0` stops the recursion. The `static_assert` lines verify correctness at compile time — if any value is wrong, the program won't even compile.
 
 ```cpp
 #include <iostream>
@@ -761,6 +781,8 @@ compiles to straight-line code with no vtable lookup — critical when nanosecon
 
 ### ❌ Mistake 1 — Defining Templates in `.cpp` Files
 
+This shows a common linker error: the template body is hidden in `math.cpp`, so when `main.cpp` tries to use `square(5)`, the compiler can't instantiate it and the linker fails with "undefined reference."
+
 ```cpp
 // math.h
 template <typename T> T square(T x);   // declaration only
@@ -777,6 +799,8 @@ int main() { return square(5); }   // LINKER ERROR: undefined reference
 
 ### ❌ Mistake 2 — Forgetting `typename` for Dependent Types
 
+When accessing a nested type inside a template parameter (like `T::iterator`), the compiler doesn't know whether `iterator` is a type or a value. You must add the `typename` keyword to disambiguate.
+
 ```cpp
 template <typename T>
 void foo() {
@@ -786,6 +810,8 @@ void foo() {
 ```
 
 ### ❌ Mistake 3 — Ambiguous Deduction with Mixed Types
+
+When both arguments must share the same type `T`, passing `int` and `double` creates a conflict — the compiler can't decide which type to use. The fix is to specify the type explicitly with `add<double>`.
 
 ```cpp
 template <typename T>
@@ -797,6 +823,8 @@ add<double>(1, 2.5);   // FIX: explicit template argument
 
 ### ❌ Mistake 4 — Trying to Partially Specialize Function Templates
 
+C++ does not allow partial specialization of function templates. What looks like a specialization for pointer types is actually a function overload — which is the correct approach to achieve the same goal.
+
 ```cpp
 // This is ILLEGAL:
 template <typename T>
@@ -806,6 +834,8 @@ void process(T* ptr) { /* ... */ }   // This is an OVERLOAD, not a partial spec
 ```
 
 ### ❌ Mistake 5 — Infinite Recursion in Template Metaprogramming
+
+Without a base-case specialization for `N=0`, the recursive `Factorial` template instantiates itself infinitely until the compiler hits its depth limit and fails. Always provide a terminating specialization for recursive templates.
 
 ```cpp
 template <unsigned N>
