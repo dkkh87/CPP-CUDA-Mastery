@@ -43,6 +43,9 @@ is typically 8 bytes regardless of what it points to.
 - **Hardware** — memory-mapped I/O requires writing to specific addresses.
 
 ### How
+
+This snippet shows the three fundamental pointer operations: declaring a pointer with `*`, getting an address with `&`, and dereferencing with `*` to read or write the value at that address.
+
 ```cpp
 int x = 42;
 int* p = &x;   // p holds the address of x
@@ -54,6 +57,8 @@ int* p = &x;   // p holds the address of x
 ## Code Examples
 
 ### Example 1 — Basic Pointer Operations
+
+This program creates an integer, stores its address in a pointer, and then prints both the address and the value. It also shows how dereferencing a pointer with `*` lets you modify the original variable indirectly.
 
 ```cpp
 // basic_pointers.cpp
@@ -77,6 +82,8 @@ int main() {
 ```
 
 ### Example 2 — Pointer Arithmetic and Arrays
+
+This example demonstrates that an array name decays to a pointer to its first element, and that adding an integer `i` to a pointer advances it by `i * sizeof(T)` bytes. It also shows how `ptrdiff_t` captures the distance between two pointers in element units.
 
 ```cpp
 // pointer_arithmetic.cpp
@@ -104,6 +111,8 @@ int main() {
 
 ### Example 3 — nullptr vs NULL
 
+This code illustrates why `nullptr` is safer than `NULL` in C++. Because `NULL` is often defined as `0` (an integer), passing it to an overloaded function can call the wrong overload. `nullptr` has its own type (`std::nullptr_t`) and always resolves to the pointer version.
+
 ```cpp
 // nullptr_demo.cpp
 #include <iostream>
@@ -126,6 +135,8 @@ int main() {
 ```
 
 ### Example 4 — Const Pointers vs Pointers to Const
+
+This example walks through the three ways to combine `const` with pointers: `const int*` (you can't change the value being pointed to), `int* const` (you can't change where the pointer points), and `const int* const` (neither can change). Read declarations right-to-left to keep them straight.
 
 ```cpp
 // const_pointers.cpp
@@ -155,6 +166,8 @@ int main() {
 ```
 
 ### Example 5 — Function Pointers and Callbacks
+
+This program stores the addresses of two comparison functions (`ascending` and `descending`) in function pointer variables and passes them to a sorting routine. This callback pattern lets you change a function's behavior at runtime without modifying the function itself.
 
 ```cpp
 // function_pointers.cpp
@@ -192,6 +205,8 @@ int main() {
 ```
 
 ### Example 6 — Void Pointers
+
+A `void*` is a type-erased pointer that can point to any data type, but it cannot be dereferenced directly. This example casts a `void*` to `unsigned char*` to print the raw bytes of different types, demonstrating how `void*` enables generic, type-agnostic functions.
 
 ```cpp
 // void_pointer.cpp
@@ -291,6 +306,8 @@ without leaks.
 
 ### Solution 1
 
+This solution swaps two integers by receiving their addresses as pointer parameters. Dereferencing each pointer lets the function modify the caller's original variables rather than working on copies.
+
 ```cpp
 #include <iostream>
 
@@ -309,6 +326,8 @@ int main() {
 ```
 
 ### Solution 2
+
+This solution reverses an array in place using only pointer arithmetic — no `[]` indexing. Two pointers start at opposite ends and walk inward, swapping values until they meet, demonstrating how pointer math replaces array subscripts.
 
 ```cpp
 #include <iostream>
@@ -335,6 +354,8 @@ int main() {
 
 ### Solution 3
 
+This function calculates string length by walking a pointer forward from the start until it reaches the null terminator `'\0'`. The difference between the final and starting pointer positions gives the character count, mirroring how the standard `strlen` works internally.
+
 ```cpp
 #include <iostream>
 #include <cstddef>
@@ -352,6 +373,8 @@ int main() {
 ```
 
 ### Solution 4
+
+This solution builds a dispatch table — an array of function pointers — to select an arithmetic operation by index. It demonstrates how function pointers let you replace long `if/else` or `switch` chains with a simple array lookup.
 
 ```cpp
 #include <iostream>
@@ -375,6 +398,8 @@ int main() {
 ```
 
 ### Solution 5
+
+This solution dynamically allocates a 2D matrix using a pointer-to-pointer (`int**`). It first allocates an array of row pointers, then allocates each row individually. Deallocation must happen in reverse order — rows first, then the row-pointer array — to avoid leaks.
 
 ```cpp
 #include <iostream>

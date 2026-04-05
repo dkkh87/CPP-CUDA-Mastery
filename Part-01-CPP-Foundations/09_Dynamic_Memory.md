@@ -38,6 +38,9 @@ important idiom in C++.
 - **Polymorphism** — base pointer to derived object on the heap.
 
 ### How
+
+This snippet shows the basic lifecycle of heap memory: `new` allocates and initializes, you use the pointer to access the value, `delete` frees the memory, and setting the pointer to `nullptr` prevents accidental reuse.
+
 ```cpp
 int* p = new int(42);     // allocate + initialize
 *p = 100;                 // use
@@ -50,6 +53,8 @@ p = nullptr;              // prevent dangling
 ## Code Examples
 
 ### Example 1 — Stack vs Heap
+
+This program contrasts stack and heap allocation. Stack variables are created and destroyed automatically within their scope, while heap variables (created with `new`) persist until you explicitly `delete` them. Large objects like the 1 MB struct should go on the heap to avoid stack overflow.
 
 ```cpp
 // stack_vs_heap.cpp
@@ -82,6 +87,8 @@ int main() {
 
 ### Example 2 — Dynamic Arrays
 
+This example allocates an array whose size is determined at runtime using `new int[n]`. Because the size isn't known at compile time, stack allocation won't work. The critical rule: always use `delete[]` (not plain `delete`) to free arrays created with `new[]`.
+
 ```cpp
 // dynamic_arrays.cpp
 #include <iostream>
@@ -111,6 +118,8 @@ int main() {
 ```
 
 ### Example 3 — Memory Leak Demonstration
+
+This intentionally buggy function shows how an early `return` can skip the `delete[]` call, causing a memory leak. The fixed version adds cleanup before every exit path. In real code, RAII wrappers are preferred so you don't have to remember to free on every path.
 
 ```cpp
 // memory_leak.cpp — intentional leak for demonstration
@@ -153,6 +162,8 @@ int main() {
 ```
 
 ### Example 4 — RAII Pattern (The Right Way)
+
+This `Buffer` class demonstrates the RAII pattern: the constructor acquires memory with `new`, and the destructor releases it with `delete[]`. Even when an exception is thrown, the destructor runs automatically during stack unwinding, guaranteeing no leak. Copy operations are deleted to prevent double-free bugs.
 
 ```cpp
 // raii_buffer.cpp
@@ -210,6 +221,8 @@ int main() {
 
 ### Example 5 — Double-Free and Use-After-Free
 
+This example shows two of the most dangerous pointer bugs: deleting the same memory twice (double-free) and accessing memory after it has been freed (use-after-free). Both cause undefined behavior. The fix is to set the pointer to `nullptr` immediately after deleting, since `delete nullptr` is safely defined as a no-op.
+
 ```cpp
 // double_free.cpp — UNDEFINED BEHAVIOR examples
 #include <iostream>
@@ -229,6 +242,8 @@ int main() {
 ```
 
 ### Example 6 — Why Manual Memory Is Dangerous
+
+This example contrasts manual `new`/`delete` with RAII containers like `std::vector`. In `dangerous()`, if any allocation or code throws an exception, previously allocated memory leaks because `delete` is never reached. In `safe_with_raii()`, the vectors' destructors automatically free memory during stack unwinding.
 
 ```cpp
 // exception_leak.cpp — leak through exception
@@ -363,6 +378,8 @@ exception occurs between the two allocations, without using smart pointers (use 
 
 ### Solution 1
 
+This minimal example allocates a single integer on the heap, prints it, then properly frees it and nullifies the pointer. It demonstrates the complete `new` → use → `delete` → `nullptr` lifecycle.
+
 ```cpp
 #include <iostream>
 
@@ -375,6 +392,8 @@ int main() {
 ```
 
 ### Solution 2
+
+This solution allocates a dynamic array of `std::string` objects using `new[]`, fills them, prints them, and frees with `delete[]`. Note that `std::string` objects on the heap still manage their own internal character buffers — `delete[]` properly calls each string's destructor.
 
 ```cpp
 #include <iostream>
@@ -395,6 +414,8 @@ int main() {
 ```
 
 ### Solution 3
+
+This `DynArray` class is a complete RAII wrapper around a raw `int` array. The constructor allocates, the destructor frees, copy is disabled to prevent double-free, and `at()` provides bounds-checked access that throws on out-of-range indices.
 
 ```cpp
 #include <iostream>
@@ -443,6 +464,8 @@ int main() {
 
 ### Solution 4
 
+These commands show two ways to detect memory leaks: compiling with AddressSanitizer (`-fsanitize=address`) for fast, integrated checking, or running the binary through Valgrind for detailed leak reports including exact allocation sites.
+
 ```bash
 # Compile with AddressSanitizer
 g++ -std=c++17 -fsanitize=address -g -o leak_test leak_test.cpp
@@ -455,6 +478,8 @@ valgrind --leak-check=full ./leak_test
 ```
 
 ### Solution 5
+
+This solution wraps each allocation in its own RAII class (`IntBuffer`), so that even when an exception is thrown between the two allocations, both buffers are automatically freed by their destructors during stack unwinding. This pattern eliminates the need for manual `try/catch` cleanup.
 
 ```cpp
 #include <iostream>

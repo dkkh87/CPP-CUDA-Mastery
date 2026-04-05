@@ -43,6 +43,9 @@ indistinguishable from using the original object.
 - **Move semantics** — rvalue references enable zero-copy transfers (C++11).
 
 ### How
+
+This snippet demonstrates creating an lvalue reference (an alias for an existing variable) and a const reference that can bind to a temporary value. Modifying the reference changes the original variable directly.
+
 ```cpp
 int x = 42;
 int& ref = x;    // ref is an alias for x
@@ -56,6 +59,8 @@ const int& cref = 42;  // OK — const ref extends temporary lifetime
 ## Code Examples
 
 ### Example 1 — Lvalue References
+
+This example shows the two most common uses of lvalue references: passing a large object by `const&` to avoid copying, and passing by `&` to let a function modify the caller's variable. Notice how `greet("Bob")` works because `const&` can bind to a temporary string.
 
 ```cpp
 // lvalue_references.cpp
@@ -87,6 +92,8 @@ int main() {
 
 ### Example 2 — Demonstrating Value Categories
 
+This program uses function overloading to reveal whether an expression is an lvalue, a const lvalue, or an rvalue. It demonstrates that a named variable is an lvalue, a function return is a prvalue, and `std::move()` produces an xvalue.
+
 ```cpp
 // value_categories.cpp
 #include <iostream>
@@ -113,6 +120,8 @@ int main() {
 ```
 
 ### Example 3 — Dangling Reference Pitfalls
+
+This example contrasts a dangerous pattern (returning a reference to a local variable, which creates a dangling reference) with two safe alternatives: returning by value and returning a reference to a parameter that outlives the function call.
 
 ```cpp
 // dangling_reference.cpp — DO NOT USE THIS PATTERN
@@ -150,6 +159,8 @@ int main() {
 
 ### Example 4 — Reference vs Pointer Comparison
 
+This side-by-side comparison shows the same `translate` function written with a pointer and with a reference. The pointer version requires null-checking and uses `->` syntax, while the reference version is cleaner and guaranteed non-null.
+
 ```cpp
 // ref_vs_ptr.cpp
 #include <iostream>
@@ -184,6 +195,8 @@ int main() {
 
 ### Example 5 — Const Reference Lifetime Extension
 
+This code demonstrates a special C++ rule: when you bind a temporary (like the string returned by `make_greeting`) to a `const&` or `&&` variable, the temporary's lifetime is extended to match the reference. Without this rule, the temporary would be destroyed immediately.
+
 ```cpp
 // lifetime_extension.cpp
 #include <iostream>
@@ -207,6 +220,8 @@ int main() {
 ```
 
 ### Example 6 — Preview of Move Semantics
+
+This example previews move semantics by showing how `std::move` casts an lvalue to an rvalue reference so it can be passed to a function expecting `T&&`. After the move, the source string is in a valid but unspecified state — you can still use it, but its contents are unpredictable.
 
 ```cpp
 // move_preview.cpp
@@ -332,6 +347,8 @@ const std::string& get_name() {
 
 ### Solution 1
 
+This solution swaps two integers using references instead of pointers. Notice how the call site (`swap(x, y)`) is cleaner — no `&` needed — because references act as aliases and automatically bind to the original variables.
+
 ```cpp
 #include <iostream>
 
@@ -349,6 +366,8 @@ int main() {
 ```
 
 ### Solution 2
+
+This function returns a `const int&` to the largest of three values. By accepting and returning references, no copies are made — the caller gets a direct alias to whichever original variable was largest.
 
 ```cpp
 #include <iostream>
@@ -374,6 +393,8 @@ int main() {
 6. `"Hello"` → **lvalue** (string literals have static storage duration)
 
 ### Solution 4
+
+This `Matrix` struct's `scale` method returns `*this` by reference, enabling method chaining like `m.scale(2).scale(3)`. Returning `*this` is a common C++ pattern for fluent APIs where each method modifies the object and passes it along.
 
 ```cpp
 #include <iostream>
@@ -407,6 +428,8 @@ int main() {
 ```
 
 ### Solution 5
+
+This fix changes `get_name` from returning a reference (which would dangle, since the local string is destroyed at function exit) to returning by value. Thanks to Named Return Value Optimization (NRVO), the compiler eliminates the copy, so this is both safe and efficient.
 
 ```cpp
 // FIXED: return by value instead of by reference
