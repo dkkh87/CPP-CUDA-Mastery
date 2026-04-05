@@ -13,13 +13,11 @@
 | CUDA kernel launch syntax | You will write and launch multiple kernels per stream |
 | Host / device memory management | `cudaMalloc`, `cudaFree`, `cudaMemcpy` basics |
 | Pinned (page-locked) memory | Required for asynchronous transfers (`cudaMallocHost`) |
-| Basic understanding of concurrency | Streams overlap transfers and compute — you must reason about ordering |
+| Basic concurrency concepts | Streams overlap transfers and compute — you must reason about ordering |
 
 ---
 
 ## Learning Objectives
-
-By completing this project you will be able to:
 
 1. **Create and manage multiple CUDA streams** to overlap data transfers with kernel execution.
 2. **Implement a staged pipeline** (Upload → Process1 → Process2 → Download) where different chunks execute different stages concurrently.
@@ -43,7 +41,6 @@ flowchart LR
 ### Stream Overlap Timeline (3 Streams, 4 Chunks)
 
 Each row is a CUDA stream. Time flows left → right.
-Chunks from different streams execute different stages simultaneously.
 
 ```mermaid
 gantt
@@ -75,16 +72,13 @@ gantt
 ```
 
 > **Key insight:** While Stream 0 runs Process1 on Chunk 0, Stream 1 uploads
-> Chunk 1. While Stream 0 runs Process2, Stream 1 runs Process1 and Stream 2
-> uploads — three different stages execute in parallel.
+> Chunk 1 — three different stages can execute in parallel across streams.
 
 ---
 
 ## Step-by-Step Implementation
 
-### Step 1 — Error Checking Macro and Includes
-
-Every CUDA call must be checked. Define a macro once and use it everywhere.
+### Step 1 — Error Checking Macro
 
 ```cuda
 // stream_pipeline.cu
@@ -106,8 +100,7 @@ Every CUDA call must be checked. Define a macro once and use it everywhere.
 
 ### Step 2 — Processing Kernels
 
-**Stage 1 — Scale + Bias:** a simple element-wise transformation.
-**Stage 2 — 1-D Smooth Filter:** each output element is the average of a small window, simulating a stencil-style dependency.
+**Stage 1** — element-wise scale + bias. **Stage 2** — 1-D smooth filter (stencil average).
 
 ```cuda
 __global__ void scale_bias_kernel(const float* __restrict__ input,
@@ -141,8 +134,6 @@ __global__ void smooth_filter_kernel(const float* __restrict__ input,
 ```
 
 ### Step 3 — Single-Stream Baseline
-
-Process the entire array in one shot — no overlap.
 
 ```cuda
 void run_single_stream(const float* h_input, float* h_output, int N,
@@ -192,10 +183,9 @@ void run_single_stream(const float* h_input, float* h_output, int N,
 
 ### Step 4 — Multi-Stream Overlapped Pipeline
 
-This is the core of the project. We split the data into `NUM_CHUNKS` pieces and
-distribute them across `NUM_STREAMS` streams in round-robin order. Each stream
-issues Upload → Process1 → Process2 → Download for its chunk, and because
-different streams are independent, the GPU can overlap operations.
+Split data into `NUM_CHUNKS` pieces, distribute round-robin across `NUM_STREAMS`
+streams. Each stream issues Upload → Process1 → Process2 → Download; independent
+streams overlap on the GPU.
 
 ```cuda
 void run_multi_stream(const float* h_input, float* h_output, int N,
@@ -205,138 +195,96 @@ void run_multi_stream(const float* h_input, float* h_output, int N,
     size_t bytes = N * sizeof(float);
     int chunk_size = (N + num_chunks - 1) / num_chunks;
 
-    // --- Allocate device memory (entire array, chunked by offset) ---
     float *d_input, *d_inter, *d_output;
     CUDA_CHECK(cudaMalloc(&d_input,  bytes));
     CUDA_CHECK(cudaMalloc(&d_inter,  bytes));
     CUDA_CHECK(cudaMalloc(&d_output, bytes));
 
-    // --- Create streams ---
     cudaStream_t* streams = new cudaStream_t[num_streams];
-    for (int s = 0; s < num_streams; ++s) {
+    for (int s = 0; s < num_streams; ++s)
         CUDA_CHECK(cudaStreamCreate(&streams[s]));
-    }
 
-    // --- Create timing events ---
     cudaEvent_t ev_start, ev_stop;
     CUDA_CHECK(cudaEventCreate(&ev_start));
     CUDA_CHECK(cudaEventCreate(&ev_stop));
 
     // Per-chunk stage events for detailed timing
-    cudaEvent_t* ev_upload_start  = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_upload_stop   = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_proc1_start   = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_proc1_stop    = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_proc2_start   = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_proc2_stop    = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_download_start = new cudaEvent_t[num_chunks];
-    cudaEvent_t* ev_download_stop  = new cudaEvent_t[num_chunks];
-
+    cudaEvent_t *ev_us = new cudaEvent_t[num_chunks], *ev_ue = new cudaEvent_t[num_chunks];
+    cudaEvent_t *ev_1s = new cudaEvent_t[num_chunks], *ev_1e = new cudaEvent_t[num_chunks];
+    cudaEvent_t *ev_2s = new cudaEvent_t[num_chunks], *ev_2e = new cudaEvent_t[num_chunks];
+    cudaEvent_t *ev_ds = new cudaEvent_t[num_chunks], *ev_de = new cudaEvent_t[num_chunks];
     for (int c = 0; c < num_chunks; ++c) {
-        CUDA_CHECK(cudaEventCreate(&ev_upload_start[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_upload_stop[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_proc1_start[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_proc1_stop[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_proc2_start[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_proc2_stop[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_download_start[c]));
-        CUDA_CHECK(cudaEventCreate(&ev_download_stop[c]));
+        CUDA_CHECK(cudaEventCreate(&ev_us[c])); CUDA_CHECK(cudaEventCreate(&ev_ue[c]));
+        CUDA_CHECK(cudaEventCreate(&ev_1s[c])); CUDA_CHECK(cudaEventCreate(&ev_1e[c]));
+        CUDA_CHECK(cudaEventCreate(&ev_2s[c])); CUDA_CHECK(cudaEventCreate(&ev_2e[c]));
+        CUDA_CHECK(cudaEventCreate(&ev_ds[c])); CUDA_CHECK(cudaEventCreate(&ev_de[c]));
     }
 
     CUDA_CHECK(cudaEventRecord(ev_start, 0));
 
-    // --- Issue work: round-robin chunks across streams ---
     int threads = 256;
     for (int c = 0; c < num_chunks; ++c) {
         int offset   = c * chunk_size;
         int cur_size = min(chunk_size, N - offset);
         if (cur_size <= 0) break;
-
         size_t cur_bytes = cur_size * sizeof(float);
         int blocks = (cur_size + threads - 1) / threads;
-        cudaStream_t stream = streams[c % num_streams];
+        cudaStream_t st = streams[c % num_streams];
 
-        // Upload
-        CUDA_CHECK(cudaEventRecord(ev_upload_start[c], stream));
+        CUDA_CHECK(cudaEventRecord(ev_us[c], st));
         CUDA_CHECK(cudaMemcpyAsync(d_input + offset, h_input + offset,
-                                   cur_bytes, cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaEventRecord(ev_upload_stop[c], stream));
+                                   cur_bytes, cudaMemcpyHostToDevice, st));
+        CUDA_CHECK(cudaEventRecord(ev_ue[c], st));
 
-        // Stage 1 — Scale + Bias
-        CUDA_CHECK(cudaEventRecord(ev_proc1_start[c], stream));
-        scale_bias_kernel<<<blocks, threads, 0, stream>>>(
+        CUDA_CHECK(cudaEventRecord(ev_1s[c], st));
+        scale_bias_kernel<<<blocks, threads, 0, st>>>(
             d_input + offset, d_inter + offset, cur_size, scale, bias);
-        CUDA_CHECK(cudaEventRecord(ev_proc1_stop[c], stream));
+        CUDA_CHECK(cudaEventRecord(ev_1e[c], st));
 
-        // Stage 2 — Smooth Filter
-        CUDA_CHECK(cudaEventRecord(ev_proc2_start[c], stream));
-        smooth_filter_kernel<<<blocks, threads, 0, stream>>>(
+        CUDA_CHECK(cudaEventRecord(ev_2s[c], st));
+        smooth_filter_kernel<<<blocks, threads, 0, st>>>(
             d_inter + offset, d_output + offset, cur_size, radius);
-        CUDA_CHECK(cudaEventRecord(ev_proc2_stop[c], stream));
+        CUDA_CHECK(cudaEventRecord(ev_2e[c], st));
 
-        // Download
-        CUDA_CHECK(cudaEventRecord(ev_download_start[c], stream));
+        CUDA_CHECK(cudaEventRecord(ev_ds[c], st));
         CUDA_CHECK(cudaMemcpyAsync(h_output + offset, d_output + offset,
-                                   cur_bytes, cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaEventRecord(ev_download_stop[c], stream));
+                                   cur_bytes, cudaMemcpyDeviceToHost, st));
+        CUDA_CHECK(cudaEventRecord(ev_de[c], st));
     }
 
     CUDA_CHECK(cudaEventRecord(ev_stop, 0));
-
-    // --- Synchronize everything ---
-    for (int s = 0; s < num_streams; ++s) {
+    for (int s = 0; s < num_streams; ++s)
         CUDA_CHECK(cudaStreamSynchronize(streams[s]));
-    }
 
-    // --- Print total time ---
     float total_ms = 0.0f;
     CUDA_CHECK(cudaEventElapsedTime(&total_ms, ev_start, ev_stop));
     printf("[Multi-stream]   Total: %.3f ms  (streams=%d, chunks=%d)\n",
            total_ms, num_streams, num_chunks);
 
-    // --- Print per-chunk breakdown ---
     printf("\n  %-6s  %-10s %-10s %-10s %-10s\n",
            "Chunk", "Upload ms", "Stage1 ms", "Stage2 ms", "DLoad ms");
     for (int c = 0; c < num_chunks; ++c) {
-        int offset   = c * chunk_size;
-        int cur_size = min(chunk_size, N - offset);
-        if (cur_size <= 0) break;
-
+        if (c * chunk_size >= N) break;
         float t_up, t_p1, t_p2, t_dl;
-        CUDA_CHECK(cudaEventElapsedTime(&t_up, ev_upload_start[c], ev_upload_stop[c]));
-        CUDA_CHECK(cudaEventElapsedTime(&t_p1, ev_proc1_start[c],  ev_proc1_stop[c]));
-        CUDA_CHECK(cudaEventElapsedTime(&t_p2, ev_proc2_start[c],  ev_proc2_stop[c]));
-        CUDA_CHECK(cudaEventElapsedTime(&t_dl, ev_download_start[c], ev_download_stop[c]));
-        printf("  C%-5d  %-10.3f %-10.3f %-10.3f %-10.3f\n",
-               c, t_up, t_p1, t_p2, t_dl);
+        CUDA_CHECK(cudaEventElapsedTime(&t_up, ev_us[c], ev_ue[c]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_p1, ev_1s[c], ev_1e[c]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_p2, ev_2s[c], ev_2e[c]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_dl, ev_ds[c], ev_de[c]));
+        printf("  C%-5d  %-10.3f %-10.3f %-10.3f %-10.3f\n", c, t_up, t_p1, t_p2, t_dl);
     }
 
-    // --- Cleanup ---
     for (int c = 0; c < num_chunks; ++c) {
-        cudaEventDestroy(ev_upload_start[c]);
-        cudaEventDestroy(ev_upload_stop[c]);
-        cudaEventDestroy(ev_proc1_start[c]);
-        cudaEventDestroy(ev_proc1_stop[c]);
-        cudaEventDestroy(ev_proc2_start[c]);
-        cudaEventDestroy(ev_proc2_stop[c]);
-        cudaEventDestroy(ev_download_start[c]);
-        cudaEventDestroy(ev_download_stop[c]);
+        cudaEventDestroy(ev_us[c]); cudaEventDestroy(ev_ue[c]);
+        cudaEventDestroy(ev_1s[c]); cudaEventDestroy(ev_1e[c]);
+        cudaEventDestroy(ev_2s[c]); cudaEventDestroy(ev_2e[c]);
+        cudaEventDestroy(ev_ds[c]); cudaEventDestroy(ev_de[c]);
     }
-    delete[] ev_upload_start;  delete[] ev_upload_stop;
-    delete[] ev_proc1_start;   delete[] ev_proc1_stop;
-    delete[] ev_proc2_start;   delete[] ev_proc2_stop;
-    delete[] ev_download_start; delete[] ev_download_stop;
-
-    CUDA_CHECK(cudaEventDestroy(ev_start));
-    CUDA_CHECK(cudaEventDestroy(ev_stop));
-    for (int s = 0; s < num_streams; ++s) {
-        CUDA_CHECK(cudaStreamDestroy(streams[s]));
-    }
+    delete[] ev_us; delete[] ev_ue; delete[] ev_1s; delete[] ev_1e;
+    delete[] ev_2s; delete[] ev_2e; delete[] ev_ds; delete[] ev_de;
+    CUDA_CHECK(cudaEventDestroy(ev_start));  CUDA_CHECK(cudaEventDestroy(ev_stop));
+    for (int s = 0; s < num_streams; ++s) CUDA_CHECK(cudaStreamDestroy(streams[s]));
     delete[] streams;
-
-    CUDA_CHECK(cudaFree(d_input));
-    CUDA_CHECK(cudaFree(d_inter));
-    CUDA_CHECK(cudaFree(d_output));
+    CUDA_CHECK(cudaFree(d_input)); CUDA_CHECK(cudaFree(d_inter)); CUDA_CHECK(cudaFree(d_output));
 }
 ```
 
@@ -464,41 +412,19 @@ nvcc -O2 -arch=sm_75 -o stream_pipeline stream_pipeline.cu
 ### Quick Smoke Test
 
 ```bash
-# Minimal size — fast, catches indexing bugs
-./stream_pipeline 1024 2 4
-
-# Large size — stresses overlap
-./stream_pipeline 33554432 3 12
+./stream_pipeline 1024 2 4        # minimal — catches indexing bugs
+./stream_pipeline 33554432 3 12   # large — stresses overlap
 ```
 
 ---
 
 ## Performance Analysis
 
-### Expected Output (example on RTX 3090, N = 16M)
+### Why Multi-Stream Is Faster
 
-```
-N = 16777216 (64.0 MB)  streams = 3  chunks = 8
-[Single-stream]  Total: 5.842 ms
-Single-stream: Validation PASSED (max error = 0.00e+00)
-[Multi-stream]   Total: 3.271 ms  (streams=3, chunks=8)
-
-  Chunk   Upload ms  Stage1 ms  Stage2 ms  DLoad ms
-  C0      0.418      0.089      0.142      0.406
-  C1      0.417      0.088      0.141      0.405
-  ...
-Multi-stream:  Validation PASSED (max error = 0.00e+00)
-```
-
-### Why It's Faster
-
-The single-stream timeline is strictly sequential:
-
-```
-[Upload ALL]──[Process1 ALL]──[Process2 ALL]──[Download ALL]
-```
-
-The multi-stream timeline overlaps stages across chunks:
+Single-stream is strictly sequential — `Upload + Process1 + Process2 + Download`.
+Multi-stream overlaps stages across chunks so the wall-clock time approaches
+`max(total_upload, total_compute, total_download)` instead of their sum:
 
 ```
 Stream 0: [Up C0][P1 C0][P2 C0][Dl C0]          [Up C3]...
@@ -506,30 +432,22 @@ Stream 1:        [Up C1][P1 C1][P2 C1][Dl C1]
 Stream 2:               [Up C2][P1 C2][P2 C2][Dl C2]
 ```
 
-The GPU's copy engines and compute engines run in parallel, so the wall-clock
-time approaches `max(total_upload, total_compute, total_download)` instead of
-their sum.
-
 ### Nsight Systems Timeline Analysis
 
 Profile with Nsight Systems to visually confirm overlap:
 
 ```bash
 nsys profile --trace=cuda,nvtx -o pipeline_report ./stream_pipeline 16777216 3 8
-nsys-ui pipeline_report.nsys-rep
 ```
 
-**What to look for in the timeline:**
+**What to look for:** (1) HtoD transfers stagger across streams, (2) kernel
+launches from different streams interleave on the Compute row, (3) DtoH
+downloads begin before all kernels finish, (4) each stream row shows a clean
+4-stage sequence offset in time.
 
-1. **CUDA HtoD row:** Upload chunks should stagger across streams, not serialize.
-2. **CUDA Compute row:** Kernel launches from different streams interleave.
-3. **CUDA DtoH row:** Downloads begin before all kernels finish.
-4. **Stream rows:** Each stream shows its 4-stage sequence; streams offset in time.
-
-> **Common pitfall:** If you use pageable memory (`malloc`) instead of pinned
-> memory (`cudaMallocHost`), the driver silently serializes all transfers through
-> a staging buffer, destroying all overlap. The Nsight timeline will show no
-> concurrency — that is the symptom.
+> **Pitfall:** Using pageable memory (`malloc`) instead of pinned memory
+> (`cudaMallocHost`) silently serializes all transfers — the Nsight timeline
+> will show zero concurrency.
 
 ### Tuning Parameters
 
@@ -544,67 +462,45 @@ nsys-ui pipeline_report.nsys-rep
 
 ## Extensions and Challenges
 
-### 🔵 Extension 1 — Callback-Based Host Post-Processing
+### 🔵 Extension 1 — Host Callback Post-Processing
 
-Register a host callback on each stream after download completes so you can
-post-process each chunk on the CPU without explicit synchronization:
-
-```cuda
-void CUDART_CB host_postprocess(void* data) {
-    int chunk_id = *static_cast<int*>(data);
-    printf("  Chunk %d arrived on host — ready for CPU work\n", chunk_id);
-}
-// After download:
-// cudaLaunchHostFunc(stream, host_postprocess, &chunk_ids[c]);
-```
+Use `cudaLaunchHostFunc` to trigger CPU-side work per chunk without explicit sync.
 
 ### 🔵 Extension 2 — Add a Third Kernel Stage
 
-Insert a nonlinear activation (e.g., `tanhf`) between Stage 1 and Stage 2 to
-create a deeper pipeline. Measure whether 3 stages benefit from more streams.
+Insert a nonlinear activation (`tanhf`) between Stage 1 and Stage 2. Measure
+whether a deeper pipeline benefits from more streams.
 
 ### 🔴 Extension 3 — Dynamic Chunk Scheduling
 
-Instead of round-robin, implement a simple work-stealing approach: each stream
-grabs the next unprocessed chunk from an atomic counter. This mirrors real-world
-GPU task schedulers.
+Replace round-robin with an atomic work-counter — each stream grabs the next
+unprocessed chunk, mimicking real-world GPU task schedulers.
 
 ### 🔴 Extension 4 — Multi-GPU Pipeline
 
-Extend to 2+ GPUs. Each GPU gets a range of chunks. Use `cudaMemcpyPeerAsync`
-for inter-GPU transfers and peer-to-peer streams.
+Extend to 2+ GPUs with `cudaMemcpyPeerAsync` for inter-GPU transfers.
 
 ---
 
 ## Key Takeaways
 
-1. **Pinned memory is non-negotiable.** `cudaMemcpyAsync` only truly runs
-   asynchronously when the host buffer is page-locked (`cudaMallocHost`).
-   Pageable memory forces a hidden synchronization.
-
-2. **Streams define independent task queues.** Operations within one stream
-   execute in order; operations across streams may overlap. The GPU scheduler
-   decides what actually runs concurrently based on hardware resources.
-
-3. **Events are the right timing tool.** `cudaEventRecord` + `cudaEventElapsedTime`
-   measure GPU-side elapsed time without host-side jitter. Always prefer events
-   over `std::chrono` for GPU timing.
-
-4. **More streams ≠ always faster.** Beyond 3–4 streams the hardware runs out of
-   copy engines and SM capacity. Profile to find the sweet spot for your GPU.
-
-5. **Chunk granularity matters.** Too few chunks → not enough work to overlap.
-   Too many chunks → kernel launch overhead dominates. 4–16 chunks is a
-   practical starting range.
-
+1. **Pinned memory is non-negotiable.** `cudaMemcpyAsync` only runs asynchronously
+   with page-locked buffers. Pageable memory forces hidden synchronization.
+2. **Streams are independent task queues.** Intra-stream order is guaranteed;
+   inter-stream operations may overlap based on hardware resources.
+3. **Events are the right timing tool.** `cudaEventElapsedTime` measures GPU-side
+   time without host jitter — always prefer events over `std::chrono`.
+4. **More streams ≠ always faster.** Diminishing returns past 3–4 streams due to
+   limited copy engines and SM capacity.
+5. **Chunk granularity matters.** 4–16 chunks is a good starting range — too few
+   limits overlap, too many adds launch overhead.
 6. **Nsight Systems is essential.** The timeline view is the only reliable way to
-   confirm that overlap is actually happening. Never assume — always profile.
+   confirm overlap is happening.
 
 ---
 
 ## References
 
-- [CUDA C++ Programming Guide — Streams](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#streams)
-- [CUDA C++ Best Practices Guide — Asynchronous Transfers](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#asynchronous-transfers-and-overlapping-transfers-with-computation)
+- [CUDA Programming Guide — Streams](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#streams)
+- [CUDA Best Practices — Async Transfers](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#asynchronous-transfers-and-overlapping-transfers-with-computation)
 - [Nsight Systems User Guide](https://docs.nvidia.com/nsight-systems/UserGuide/index.html)
-- Harris, M. "How to Overlap Data Transfers in CUDA C/C++" — NVIDIA Developer Blog
